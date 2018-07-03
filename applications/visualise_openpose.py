@@ -25,8 +25,20 @@ def main():
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     estimator = OpPoseEstimator(get_graph_path('cmu'))
     humans = estimator.inference(in_im, upsample_size=8.0)
-    out_im, _ = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
-    plt.imshow(out_im)
+    print(humans)
+    print(np.array(humans).shape)
+    sys.exit()
+    print(estimator.heatMat.shape)
+    print(estimator.pafMat.shape)
+    fig = plt.figure()
+    for i in range(estimator.heatMat.shape[2]):
+        fig.add_subplot(estimator.heatMat.shape[2] // 5 + 1, 5, i+1)
+        plt.imshow(estimator.heatMat[:, :, i])
+    plt.show()
+    fig = plt.figure()
+    for i in range(estimator.pafMat.shape[2]):
+        fig.add_subplot(estimator.pafMat.shape[2] // 6 + 1, 6, i+1)
+        plt.imshow(estimator.pafMat[:, :, i])
     plt.show()
     return
 
