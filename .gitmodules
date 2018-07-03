@@ -1,0 +1,3 @@
+[submodule "deps/tf-pose-estimation"]
+	path = deps/tf-pose-estimation
+	url = https://github.com/ildoonet/tf-pose-estimation
