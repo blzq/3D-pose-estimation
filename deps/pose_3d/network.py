@@ -5,9 +5,9 @@ import tensorflow as tf
 
 def build_model(inputs, training: bool):
     with tf.variable_scope('init_conv'):
-        init_conv1 = tf.layers.separable_conv2d(inputs, 72, [3, 3], 2)
+        init_conv1 = tf.layers.conv2d(inputs, 72, [3, 3], 2)
         conv_relu1 = tf.nn.relu(init_conv1)
-        init_conv2 = tf.layers.separable_conv2d(conv_relu1, 72, [3, 3], 2)
+        init_conv2 = tf.layers.conv2d(conv_relu1, 72, [3, 3], 2)
         conv_relu2 = tf.nn.relu(init_conv2)
         flatten = tf.layers.flatten(conv_relu2)
         init_linear = tf.layers.dense(flatten, 1024)

@@ -5,7 +5,7 @@ import tensorflow as tf
 from .network import build_model
 
 class PoseModel3d:
-    def __init__(self, input_shape, n_outputs: int,
+    def __init__(self, input_shape,
                  training=False,
                  summary_dir='/tmp/tensorflow_logs',
                  saver_path='/tmp/tensorflow_ckpts/3dpose.ckpt',
@@ -21,6 +21,12 @@ class PoseModel3d:
 
             self.saver_path = saver_path
             self.saver = tf.train.Saver()
+
+            self.train_writer = tf.summary.FileWriter(summary_dir + '/train',
+                                                      self.graph)
+
+            self.sess.run(tf.global_variables_initializer())
+
             if restore_model:
                 try:
                     self.saver.restore(self.sess, self.saver_path)
@@ -29,10 +35,6 @@ class PoseModel3d:
                           .format(self.saver_path))
                     print("Continuing without loading model")
 
-            self.train_writer = tf.summary.FileWriter(summary_dir + '/train',
-                                                      self.graph)
-
-            self.sess.run(tf.global_variables_initializer())
 
     def save_model(self, save_model_path: str):
         tf.saved_model.simple_save(self.sess, save_model_path,
@@ -48,8 +50,8 @@ class PoseModel3d:
 
     def train(self, dataset, epochs: int, batch_size: int):
         with self.graph.as_default():
+            dataset = dataset.shuffle(batch_size * 1000)
             dataset = dataset.batch(batch_size)
-            dataset = dataset.shuffle(128)
             iterator = dataset.make_initializable_iterator()
             heatmaps, gt_pose, _ = iterator.get_next()
 
@@ -58,8 +60,7 @@ class PoseModel3d:
             tf.summary.scalar('loss', loss)
 
             merged_summary = tf.summary.merge_all()
-
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001)
             train = optimizer.minimize(loss)
 
             for i in range(epochs):
