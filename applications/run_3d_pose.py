@@ -36,7 +36,9 @@ if __name__ == '__main__':
 
     pm_3d = PoseModel3d((None, 120, 160, 19),
                         72,
-                        restore_model=True)
+                        summary_dir='~/tensorflow_logs/3d_pose',
+                        saver_path='~/tensorflow_ckpts/3d_pose',
+                        restore_model=False)
 
     with pm_3d.graph.as_default():
         dataset = tf.data.Dataset.from_tensor_slices(
@@ -46,7 +48,7 @@ if __name__ == '__main__':
             tf.data.Dataset.from_tensor_slices(
                 tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp], 
                                 [tf.float32, tf.float32, tf.float32]))))
-    pm_3d.train(dataset, epochs=5, batch_size=5)
+    pm_3d.train(dataset, epochs=5, batch_size=16)
 
     # in_array = np.array([1, 2, 3])[np.newaxis]
     # pm_3d.train(in_array, np.array([2, 4, 6])[np.newaxis])

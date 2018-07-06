@@ -49,7 +49,7 @@ class PoseModel3d:
     def train(self, dataset, epochs: int, batch_size: int):
         with self.graph.as_default():
             dataset = dataset.batch(batch_size)
-            dataset = dataset.shuffle()
+            dataset = dataset.shuffle(128)
             iterator = dataset.make_initializable_iterator()
             heatmaps, gt_pose, _ = iterator.get_next()
 

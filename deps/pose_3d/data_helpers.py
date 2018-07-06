@@ -24,9 +24,9 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
         # shape: time, 240, 320
 
     min_length = np.min([frames.shape[0], poses.shape[0], heatmaps.shape[0]])
-    heatmaps = heatmaps[min_length]
-    poses = poses[min_length]
-    frames = frames[min_length]
+    heatmaps = heatmaps[:min_length]
+    poses = poses[:min_length]
+    frames = frames[:min_length]
 
     return heatmaps, poses, frames
 
