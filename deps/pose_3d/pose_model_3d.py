@@ -2,34 +2,37 @@
 # -*- coding: utf-8 -*-
 
 import tensorflow as tf
+from .network import build_model
 
 class PoseModel3d:
     def __init__(self, input_shape, n_outputs: int,
+                 training=False,
                  summary_dir='/tmp/tensorflow_logs',
                  saver_path='/tmp/tensorflow_ckpts/3dpose.ckpt',
                  restore_model=True):
         self.graph = tf.Graph()
         with self.graph.as_default():
-            config = tf.ConfigProto(device_count={'CPU' : 1, 'GPU' : 0})
+            config = tf.ConfigProto()
+            config.gpu_options.allow_growth = True
             self.sess = tf.Session(config=config)
 
             self.inputs = tf.placeholder(tf.float32, shape=input_shape)
-            self.outputs = _build_model(self.inputs, n_outputs)
-
-            self.sess.run(tf.global_variables_initializer())
+            self.outputs = build_model(self.inputs, training)
 
             self.saver_path = saver_path
             self.saver = tf.train.Saver()
             if restore_model:
                 try:
                     self.saver.restore(self.sess, self.saver_path)
-                except tf.errors.InvalidArgumentError:
+                except tf.errors.NotFoundError:
                     print("No model checkpoint found for given path {}"
                           .format(self.saver_path))
                     print("Continuing without loading model")
 
-            self.writer = tf.summary.FileWriter(summary_dir)
-            self.writer.add_graph(tf.get_default_graph())
+            self.train_writer = tf.summary.FileWriter(summary_dir + '/train',
+                                                      self.graph)
+
+            self.sess.run(tf.global_variables_initializer())
 
     def save_model(self, save_model_path: str):
         tf.saved_model.simple_save(self.sess, save_model_path,
@@ -46,11 +49,12 @@ class PoseModel3d:
     def train(self, dataset, epochs: int, batch_size: int):
         with self.graph.as_default():
             dataset = dataset.batch(batch_size)
+            dataset = dataset.shuffle()
             iterator = dataset.make_initializable_iterator()
             heatmaps, gt_pose, _ = iterator.get_next()
 
             loss = tf.losses.mean_squared_error(
-                    labels=gt_pose, predictions=self.outputs)
+                labels=gt_pose, predictions=self.outputs)
             tf.summary.scalar('loss', loss)
 
             merged_summary = tf.summary.merge_all()
@@ -63,25 +67,12 @@ class PoseModel3d:
                 while True:
                     try:
                         next_heatmap = self.sess.run(heatmaps)
+                        feed = {self.inputs: next_heatmap}
                         _, summary = self.sess.run((train, merged_summary),
-                                                    feed_dict={
-                                                        self.inputs: next_heatmap})
-                        self.writer.add_summary(summary, i)
+                                                   feed_dict=feed)
+                        self.train_writer.add_summary(summary, i)
                     except tf.errors.OutOfRangeError:
                         break
                 if i % 10 == 0:
                     self.saver.save(self.sess, self.saver_path)
 
-
-def _build_model(inputs, n_outputs: int):
-    with tf.variable_scope('conv1'):
-        conv1 = \
-            tf.layers.conv2d(inputs, n_outputs, [3, 3])
-        relu1 = tf.nn.relu(conv1)
-    with tf.variable_scope('flatten1'):
-        flatten1 = \
-            tf.layers.flatten(relu1)
-    with tf.variable_scope('linear1'):
-        linear1 = tf.layers.dense(flatten1, n_outputs)
-        relu2 = tf.nn.relu(linear1)
-    return relu2

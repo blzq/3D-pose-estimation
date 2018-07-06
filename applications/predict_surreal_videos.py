@@ -20,7 +20,8 @@ def main(surreal_path):
     base_path = os.path.join(surreal_path, 'data', 'cmu', 'train')
     for run in ['run0', 'run1', 'run2']:
         run_path = os.path.join(base_path, run)
-        for dir_name in os.listdir(run_path):
+        dir_names = sorted(os.listdir(run_path))
+        for dir_name in dir_names:
             dir_path = os.path.join(run_path, dir_name)
             video_filenames = [ f for f in os.listdir(dir_path)
                                 if f.endswith('.mp4') ]
