@@ -25,7 +25,7 @@ def main():
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     estimator = OpPoseEstimator(get_graph_path('cmu'))
     humans = estimator.inference(in_im, upsample_size=8.0)
-    out_im, _ = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
+    out_im = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
     plt.imshow(out_im)
     plt.show()
     return

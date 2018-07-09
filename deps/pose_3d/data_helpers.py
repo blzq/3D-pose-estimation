@@ -17,6 +17,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     info_dict = scipy.io.loadmat(info_file)
     poses = np.transpose(info_dict['pose'], (1, 0))
         # to shape: time, 72 = 24 joints x 3 axis-angle rot
+    shapes = np.transpose(info_dict['shape'], (1, 0))
 
     frames = [ cv2.imread(str(f))
                for f in glob.glob(frames_path + b'/f*.jpg') ]
@@ -28,5 +29,5 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     poses = poses[:min_length]
     frames = frames[:min_length]
 
-    return heatmaps, poses, frames
+    return heatmaps, poses, shapes, frames
 

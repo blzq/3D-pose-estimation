@@ -4,10 +4,11 @@
 import sys
 from os.path import dirname, realpath
 
-dir_path = dirname(realpath(__file__))
-project_path = realpath(dir_path + '/..')
+_dir_path = dirname(realpath(__file__))
 
-libs_dir_path = project_path + '/deps'
+project_path = realpath(_dir_path + '/..')
+
+_libs_dir_path = project_path + '/deps'
 
 # Adding where to find libraries and dependencies
-sys.path.append(libs_dir_path)
+sys.path.append(_libs_dir_path)

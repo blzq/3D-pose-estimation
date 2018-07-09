@@ -5,13 +5,16 @@ import tensorflow as tf
 
 def build_model(inputs, training: bool):
     with tf.variable_scope('init_conv'):
-        init_conv1 = tf.layers.conv2d(inputs, 72, [3, 3], 2)
-        conv_relu1 = tf.nn.relu(init_conv1)
-        init_conv2 = tf.layers.conv2d(conv_relu1, 72, [3, 3], 2)
-        conv_relu2 = tf.nn.relu(init_conv2)
-        flatten = tf.layers.flatten(conv_relu2)
+        inputs = inputs[:, :18]
+        init_conv1 = tf.layers.conv2d(inputs, 72, [5, 5], 2)
+        conv_elu1 = tf.nn.elu(init_conv1)
+        init_conv2 = tf.layers.conv2d(conv_elu1, 72, [3, 3], 2)
+        conv_elu2 = tf.nn.elu(init_conv2)
+        init_bn = tf.layers.batch_normalization(conv_elu2, training=training)
+        init_drop = tf.layers.dropout(init_bn, rate=0.2, training=training)
+        flatten = tf.layers.flatten(init_drop)
         init_linear = tf.layers.dense(flatten, 1024)
-        linear_relu = tf.nn.relu(init_linear)
+        linear_relu = tf.nn.elu(init_linear)
 
     with tf.variable_scope('bl_res1'):
         bl1 = _bilinear_residual_block(linear_relu, training)
