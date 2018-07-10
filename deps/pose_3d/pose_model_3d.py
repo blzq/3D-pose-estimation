@@ -40,9 +40,11 @@ class PoseModel3d:
                 try:
                     self.saver.restore(self.sess, self.saver_path)
                 except tf.errors.NotFoundError:
-                    print("No model checkpoint found for given path {}"
-                          .format(self.saver_path))
-                    print("Continuing without loading model")
+                    warn_color = '\033[93m'
+                    print("{}No model checkpoint found for given path {}"
+                          .format(warn_colour, self.saver_path))
+                    print("{}Continuing without loading model"
+                          .format(warn_colour))
 
 
     def save_model(self, save_model_path: str):
@@ -70,7 +72,7 @@ class PoseModel3d:
             tf.summary.scalar('pose_loss', pose_loss)
             reg_loss = tf.losses.mean_squared_error(
                 labels=tf.zeros(tf.shape(gt_pose)), predictions=self.outputs)
-            scaled_reg_loss = reg_loss * 0.1
+            scaled_reg_loss = reg_loss
             tf.summary.scalar('reg_loss', scaled_reg_loss)
             total_loss = pose_loss + scaled_reg_loss
 
@@ -87,17 +89,17 @@ class PoseModel3d:
                     dtype=tf.float32, parallel_iterations=batch_size)
                 outputs_m = tf.map_fn(get_inst_m, (self.outputs, betas), 
                     dtype=tf.float32, parallel_iterations=batch_size)
-                outputs_avg = tf.add(outputs_f, outputs_m)
+                outputs_avg = outputs_f # tf.add(outputs_f, outputs_m) / 2
 
                 gt_mesh_f = tf.map_fn(get_inst_f, (gt_pose, betas), 
                     dtype=tf.float32, parallel_iterations=batch_size)
                 gt_mesh_m = tf.map_fn(get_inst_m, (gt_pose, betas), 
                     dtype=tf.float32, parallel_iterations=batch_size)
-                gt_mesh_avg = tf.add(gt_mesh_f, gt_mesh_m)
+                gt_mesh_avg = gt_mesh_f # tf.add(gt_mesh_f, gt_mesh_m) / 2
 
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_mesh_avg, predictions=outputs_avg)
-                scaled_mesh_loss = mesh_loss * 5
+                scaled_mesh_loss = mesh_loss * 4
                 tf.summary.scalar('mesh_loss', scaled_mesh_loss)
 
                 total_loss += scaled_mesh_loss

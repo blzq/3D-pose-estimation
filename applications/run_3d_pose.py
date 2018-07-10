@@ -25,7 +25,7 @@ SAVER_PATH = '/home/ben/tensorflow_ckpts/3d_pose'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
 
     estimator = OpPoseEstimator(get_graph_path('cmu'))
