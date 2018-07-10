@@ -5,5 +5,5 @@
 	path = deps/tf_rodrigues
 	url = https://github.com/blzq/tf_rodrigues
 [submodule "deps/tf_pose"]
-	path = deps/tf_pose
+	path = deps/tf-pose-estimation
 	url = https://github.com/blzq/tf-pose-estimation
