@@ -3,7 +3,7 @@
 
 import tensorflow as tf
 from .network import build_model
-from smpl_numpy.smpl_tf_class import SMPLModel
+from tf_smpl.batch_smpl import SMPL
 from tf_rodrigues.rodrigues import rodrigues_batch
 
 class PoseModel3d:
@@ -13,8 +13,7 @@ class PoseModel3d:
                  saver_path='/tmp/tensorflow_ckpts/3dpose.ckpt',
                  restore_model=True,
                  mesh_loss=False,
-                 smpl_female=None,
-                 smpl_male=None):
+                 smpl_model=None):
         self.graph = tf.Graph()
         with self.graph.as_default():
             config = tf.ConfigProto()
@@ -32,8 +31,7 @@ class PoseModel3d:
 
             self.mesh_loss = mesh_loss
             if self.mesh_loss:
-                self.smpl_female = SMPLModel(smpl_female)
-                self.smpl_male = SMPLModel(smpl_male)
+                self.smpl = SMPL(smpl_model)
 
             self.sess.run(tf.global_variables_initializer())
 
@@ -64,46 +62,31 @@ class PoseModel3d:
             dataset = dataset.shuffle(batch_size * 1000)
             dataset = dataset.batch(batch_size)
             iterator = dataset.make_initializable_iterator()
-            heatmaps, gt_pose, shapes, _ = iterator.get_next()
+            heatmaps, gt_pose, betas, _ = iterator.get_next()
                 # Not using image frames for the time being
 
             out_mat = rodrigues_batch(self.outputs)
             gt_mat = rodrigues_batch(gt_pose)
+
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
             tf.summary.scalar('pose_loss', pose_loss)
 
             reg_loss = tf.losses.mean_squared_error(
                 labels=tf.zeros(tf.shape(gt_pose)), predictions=self.outputs)
-            scaled_reg_loss = reg_loss * 2
+            scaled_reg_loss = reg_loss
             tf.summary.scalar('reg_loss', scaled_reg_loss)
 
             total_loss = pose_loss + scaled_reg_loss
 
             if self.mesh_loss:
-                betas = shapes
-                trans = tf.zeros(self.smpl_female.trans_shape)
+                output_meshes, _, _ = self.smpl(betas, self.outputs, get_skin=True)
 
-                get_inst_f = (lambda ob:
-                    self.smpl_female.instance(ob[1], ob[0], trans, simplify=True))
-                get_inst_m = (lambda ob:
-                    self.smpl_male.instance(ob[1], ob[0], trans, simplify=True))
-
-                outputs_f = tf.map_fn(get_inst_f, (self.outputs, betas), 
-                    dtype=tf.float32, parallel_iterations=batch_size)
-                outputs_m = tf.map_fn(get_inst_m, (self.outputs, betas), 
-                    dtype=tf.float32, parallel_iterations=batch_size)
-                outputs_avg = outputs_f # tf.add(outputs_f, outputs_m) / 2
-
-                gt_mesh_f = tf.map_fn(get_inst_f, (gt_pose, betas), 
-                    dtype=tf.float32, parallel_iterations=batch_size)
-                gt_mesh_m = tf.map_fn(get_inst_m, (gt_pose, betas), 
-                    dtype=tf.float32, parallel_iterations=batch_size)
-                gt_mesh_avg = gt_mesh_f # tf.add(gt_mesh_f, gt_mesh_m) / 2
+                gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
 
                 mesh_loss = tf.losses.mean_squared_error(
-                    labels=gt_mesh_avg, predictions=outputs_avg)
-                scaled_mesh_loss = mesh_loss * 0.5
+                    labels=gt_meshes, predictions=output_meshes)
+                scaled_mesh_loss = mesh_loss * 2
                 tf.summary.scalar('mesh_loss', scaled_mesh_loss)
 
                 total_loss += scaled_mesh_loss

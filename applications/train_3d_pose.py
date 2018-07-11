@@ -23,8 +23,7 @@ if __name__ == '__main__':
 
     smpl_path = os.path.join(
         __init__.project_path, 'data', 'SMPL_model', 'models_numpy')
-    smpl_f = os.path.join(smpl_path, 'model_f.pkl')
-    smpl_m = os.path.join(smpl_path, 'model_m.pkl')
+    smpl_neutral = os.path.join(smpl_path, 'model_neutral_np.pkl')
 
     maps_files = []
     info_files = []
@@ -47,8 +46,7 @@ if __name__ == '__main__':
                         saver_path=SAVER_PATH,
                         restore_model=True,
                         mesh_loss=True,
-                        smpl_female=smpl_f,
-                        smpl_male=smpl_m)
+                        smpl_model=smpl_neutral)
 
     with pm_3d.graph.as_default():
         dataset = tf.data.Dataset.from_tensor_slices(
