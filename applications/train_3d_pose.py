@@ -40,7 +40,7 @@ if __name__ == '__main__':
         info_files.extend(one_dir_info_files)
         frames_paths.extend(one_dir_frames_paths)
 
-    pm_3d = PoseModel3d((None, 120, 160, 19),
+    pm_3d = PoseModel3d((None, 120, 160, 22),
                         training=True,
                         summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
@@ -56,4 +56,4 @@ if __name__ == '__main__':
             tf.data.Dataset.from_tensor_slices(
                 tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp], 
                                 [tf.float32, tf.float32, tf.float32, tf.float32]))))
-    pm_3d.train(dataset, epochs=1500, batch_size=20)
+    pm_3d.train(dataset, epochs=10000, batch_size=20)

@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+import os.path
+
 import tensorflow as tf
 from .network import build_model
 from tf_smpl.batch_smpl import SMPL
@@ -10,7 +12,7 @@ class PoseModel3d:
     def __init__(self, input_shape,
                  training=False,
                  summary_dir='/tmp/tensorflow_logs',
-                 saver_path='/tmp/tensorflow_ckpts/3dpose.ckpt',
+                 saver_path='/tmp/tensorflow_ckpts/3d_pose',
                  restore_model=True,
                  mesh_loss=False,
                  smpl_model=None):
@@ -20,7 +22,8 @@ class PoseModel3d:
             config.gpu_options.allow_growth = True  # noqa
             self.sess = tf.Session(config=config)
 
-            self.inputs = tf.placeholder(tf.float32, shape=input_shape)
+            self.inputs = tf.placeholder(tf.float32, shape=input_shape,
+                                         name='input_placeholder')
             self.outputs = build_model(self.inputs, training)
 
             self.saver_path = saver_path
@@ -36,11 +39,22 @@ class PoseModel3d:
             self.sess.run(tf.global_variables_initializer())
 
             if restore_model:
-                try:
-                    self.saver.restore(self.sess, self.saver_path)
-                except tf.errors.NotFoundError:
-                    warn_colour = '\033[93m'
-                    normal_colour = '\033[0m'
+                ok_colour = '\033[92m'
+                warn_colour = '\033[93m'
+                normal_colour = '\033[0m'
+
+                restore_path = os.path.dirname(self.saver_path)
+                restore_ckpt = tf.train.latest_checkpoint(restore_path)
+                if restore_ckpt != None:
+                    try:
+                        self.saver.restore(self.sess, restore_ckpt)
+                        print("{}Model restored from checkpoint{}"
+                                .format(ok_colour, normal_colour))
+                    except:
+                        print("{}Invalid model checkpoint found for given path {}"
+                          .format(warn_colour, self.saver_path))
+                        print("Continuing without loading model" + normal_colour)
+                else:
                     print("{}No model checkpoint found for given path {}"
                           .format(warn_colour, self.saver_path))
                     print("Continuing without loading model" + normal_colour)
@@ -62,11 +76,13 @@ class PoseModel3d:
             dataset = dataset.shuffle(batch_size * 1000)
             dataset = dataset.batch(batch_size)
             iterator = dataset.make_initializable_iterator()
-            heatmaps, gt_pose, betas, _ = iterator.get_next()
+            heatmaps, gt_pose, betas, frames = iterator.get_next()
+            input_stack = tf.concat([heatmaps, frames], axis=3)
                 # Not using image frames for the time being
 
-            out_mat = rodrigues_batch(self.outputs)
-            gt_mat = rodrigues_batch(gt_pose)
+            with tf.variable_scope("rodrigues"):
+                out_mat = rodrigues_batch(self.outputs)
+                gt_mat = rodrigues_batch(gt_pose)
 
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
@@ -74,7 +90,7 @@ class PoseModel3d:
 
             reg_loss = tf.losses.mean_squared_error(
                 labels=tf.zeros(tf.shape(gt_pose)), predictions=self.outputs)
-            scaled_reg_loss = reg_loss
+            scaled_reg_loss = reg_loss * 0.1
             tf.summary.scalar('reg_loss', scaled_reg_loss)
 
             total_loss = pose_loss + scaled_reg_loss
@@ -98,17 +114,19 @@ class PoseModel3d:
             train = optimizer.minimize(total_loss)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
 
+            self.train_writer.add_graph(self.graph)
+
             for i in range(epochs):
                 self.sess.run(iterator.initializer)
                 while True:
                     try:
-                        next_heatmap = self.sess.run(heatmaps)
-                        feed = {self.inputs: next_heatmap}
+                        next_input = self.sess.run(input_stack)
+                        feed = {self.inputs: next_input}
                         _, summary = self.sess.run((train, merged_summary),
                                                    feed_dict=feed)
                         self.train_writer.add_summary(summary, i)
                     except tf.errors.OutOfRangeError:
                         break
                 if i % 10 == 0:
-                    self.saver.save(self.sess, self.saver_path)
+                    self.saver.save(self.sess, self.saver_path, global_step=i)
 

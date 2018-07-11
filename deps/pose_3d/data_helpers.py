@@ -4,7 +4,6 @@
 import os
 import glob
 import scipy.io
-import imageio
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -19,10 +18,14 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
         # to shape: time, 72 = 24 joints x 3 axis-angle rot
     shapes = np.transpose(info_dict['shape'], (1, 0))
 
-    frames = [ cv2.imread(str(f))
+    frames = [ cv2.imread(f.decode('utf-8'))
                for f in glob.glob(frames_path + b'/f*.jpg') ]
+    frames = [ cv2.resize(frame, 
+                          dsize=(heatmaps.shape[2], heatmaps.shape[1]),
+                          interpolation=cv2.INTER_AREA)
+               for frame in frames ]
     frames = np.array(frames, dtype=np.float32)
-        # shape: time, 240, 320
+        # shape: time, 240, 320 halved in x, y dims
 
     min_length = np.min([frames.shape[0], poses.shape[0], heatmaps.shape[0]])
     heatmaps = heatmaps[:min_length]

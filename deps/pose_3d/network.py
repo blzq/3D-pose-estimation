@@ -4,16 +4,20 @@
 import tensorflow as tf
 
 def build_model(inputs, training: bool):
-    with tf.variable_scope('init'):
-        inputs = inputs[:, :18]
-        init_conv1 = tf.layers.conv2d(inputs, 144, [5, 5], 1)
+    with tf.variable_scope('init_conv'):
+        init_conv1 = tf.layers.conv2d(inputs, 72, [5, 5], 1)
         conv_elu1 = tf.nn.elu(init_conv1)
-        init_conv2 = tf.layers.conv2d(conv_elu1, 72, [3, 3], 1)
-        init_pool = tf.layers.max_pooling2d(init_conv2, 3, 1)
-        conv_elu2 = tf.nn.elu(init_pool)
-        init_bn = tf.layers.batch_normalization(conv_elu2, training=training)
-        init_drop = tf.layers.dropout(init_bn, rate=0.2, training=training)
-        flatten = tf.layers.flatten(init_drop)
+        init_conv2 = tf.layers.conv2d(conv_elu1, 144, [3, 3], 1)
+        conv_elu2 = tf.nn.elu(init_conv2)
+
+    with tf.variable_scope('xception1'):
+        xc1 = _xception_block(conv_elu2)
+    
+    with tf.variable_scope('xception2'):
+        xc2 = _xception_block(xc1)
+
+    with tf.variable_scope('init_dense'):
+        flatten = tf.layers.flatten(xc2)
         init_linear1 = tf.layers.dense(flatten, 72)
         linear_elu1 = tf.nn.elu(init_linear1)
         init_linear2 = tf.layers.dense(linear_elu1, 1024)
@@ -26,8 +30,9 @@ def build_model(inputs, training: bool):
         bl2 = _bilinear_residual_block(bl1, training)
 
     with tf.variable_scope('out_fc'):
-        out = tf.layers.dense(bl2, 72,
-                              kernel_initializer=tf.initializers.zeros)
+        out = tf.layers.dense(bl2, 72)
+
+    tf.summary.histogram('out', out)
 
     return out
 
@@ -45,3 +50,16 @@ def _bilinear_residual_block(inputs, training: bool):
     dropout2 = tf.layers.dropout(elu2, training=training)
 
     return dropout2
+
+
+def _xception_block(inputs):
+    s_conv1 = tf.layers.separable_conv2d(inputs, 144, [3, 3], padding='same')
+    relu1 = tf.nn.relu(s_conv1)
+
+    s_conv2 = tf.layers.separable_conv2d(relu1, 144, [3, 3], padding='same')
+    maxpool2 = tf.layers.max_pooling2d(s_conv2, [3, 3], 2, padding='same')
+
+    s_conv_skip = tf.layers.conv2d(inputs, 144, [1, 1], 2)
+    
+    add = tf.add(s_conv_skip, maxpool2)
+    return add
