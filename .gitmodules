@@ -1,9 +1,9 @@
-[submodule "deps/smpl_numpy"]
-	path = deps/smpl_numpy
-	url = https://github.com/CalciferZh/SMPL
 [submodule "deps/tf_rodrigues"]
 	path = deps/tf_rodrigues
 	url = https://github.com/blzq/tf_rodrigues
 [submodule "deps/tf-pose-estimation"]
 	path = deps/tf-pose-estimation
 	url = https://github.com/blzq/tf-pose-estimation
+[submodule "deps/tf_smpl"]
+	path = deps/tf_smpl
+	url = https://github.com/blzq/tf_smpl

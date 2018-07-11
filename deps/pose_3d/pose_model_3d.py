@@ -4,6 +4,7 @@
 import tensorflow as tf
 from .network import build_model
 from smpl_numpy.smpl_tf_class import SMPLModel
+from tf_rodrigues.rodrigues import rodrigues_batch
 
 class PoseModel3d:
     def __init__(self, input_shape,
@@ -40,12 +41,11 @@ class PoseModel3d:
                 try:
                     self.saver.restore(self.sess, self.saver_path)
                 except tf.errors.NotFoundError:
-                    warn_color = '\033[93m'
+                    warn_colour = '\033[93m'
+                    normal_colour = '\033[0m'
                     print("{}No model checkpoint found for given path {}"
                           .format(warn_colour, self.saver_path))
-                    print("{}Continuing without loading model"
-                          .format(warn_colour))
-
+                    print("Continuing without loading model" + normal_colour)
 
     def save_model(self, save_model_path: str):
         tf.saved_model.simple_save(self.sess, save_model_path,
@@ -67,13 +67,17 @@ class PoseModel3d:
             heatmaps, gt_pose, shapes, _ = iterator.get_next()
                 # Not using image frames for the time being
 
+            out_mat = rodrigues_batch(self.outputs)
+            gt_mat = rodrigues_batch(gt_pose)
             pose_loss = tf.losses.mean_squared_error(
-                labels=gt_pose, predictions=self.outputs)
+                labels=gt_mat, predictions=out_mat)
             tf.summary.scalar('pose_loss', pose_loss)
+
             reg_loss = tf.losses.mean_squared_error(
                 labels=tf.zeros(tf.shape(gt_pose)), predictions=self.outputs)
-            scaled_reg_loss = reg_loss
+            scaled_reg_loss = reg_loss * 2
             tf.summary.scalar('reg_loss', scaled_reg_loss)
+
             total_loss = pose_loss + scaled_reg_loss
 
             if self.mesh_loss:
@@ -99,7 +103,7 @@ class PoseModel3d:
 
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_mesh_avg, predictions=outputs_avg)
-                scaled_mesh_loss = mesh_loss * 4
+                scaled_mesh_loss = mesh_loss * 0.5
                 tf.summary.scalar('mesh_loss', scaled_mesh_loss)
 
                 total_loss += scaled_mesh_loss

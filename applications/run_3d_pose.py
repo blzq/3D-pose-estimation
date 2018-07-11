@@ -32,7 +32,7 @@ def main():
     humans = estimator.inference(in_im, upsample_size=8.0)
     heatmaps = estimator.heatMat
     heatmaps = cv2.resize(heatmaps, dsize=(160, 120),
-                          interpolation=cv2.INTER_CUBIC)
+                          interpolation=cv2.INTER_AREA)
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     pm_3d = PoseModel3d((None, 120, 160, 19),

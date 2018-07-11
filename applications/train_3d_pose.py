@@ -58,4 +58,4 @@ if __name__ == '__main__':
             tf.data.Dataset.from_tensor_slices(
                 tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp], 
                                 [tf.float32, tf.float32, tf.float32, tf.float32]))))
-    pm_3d.train(dataset, epochs=200, batch_size=20)
+    pm_3d.train(dataset, epochs=1500, batch_size=20)
