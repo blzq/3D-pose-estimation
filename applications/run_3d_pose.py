@@ -20,8 +20,8 @@ from pose_3d.data_helpers import *
 
 from tf_smpl.batch_smpl import SMPL
 
-SAVER_PATH = '/home/ben/tensorflow_ckpts/3d_pose'
-
+SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3dpose'
+SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
@@ -40,7 +40,7 @@ def main():
 
     pm_3d = PoseModel3d((None, 120, 160, 22),
                         training=False,
-                        summary_dir='/tmp/null',
+                        summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
                         restore_model=True)
     out_vals = pm_3d.estimate(inputs)

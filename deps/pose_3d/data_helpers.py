@@ -18,7 +18,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
         # to shape: time, 72 = 24 joints x 3 axis-angle rot
     shapes = np.transpose(info_dict['shape'], (1, 0))
 
-    frames = [ cv2.imread(f.decode('utf-8'))
+    frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
     frames = [ cv2.resize(frame, 
                           dsize=(heatmaps.shape[2], heatmaps.shape[1]),
@@ -30,7 +30,10 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     min_length = np.min([frames.shape[0], poses.shape[0], heatmaps.shape[0]])
     heatmaps = heatmaps[:min_length]
     poses = poses[:min_length]
+    shapes = shapes[:min_length]
     frames = frames[:min_length]
 
-    return heatmaps, poses, shapes, frames
+    concat = np.concatenate([heatmaps[:18], frames], axis=3)
+
+    return concat, poses, shapes
 

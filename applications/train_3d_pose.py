@@ -15,7 +15,7 @@ from pose_3d.data_helpers import read_maps_poses_images
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
-SAVER_PATH = '/home/ben/tensorflow_ckpts/3d_pose'
+SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose'
 
 if __name__ == '__main__':
     dataset_dir = os.path.realpath(DATASET_PATH)
@@ -28,10 +28,11 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames[:1]:
+    for basename in basenames:
         one_data_dir = os.path.join(dataset_dir, basename)
-        one_dir_maps_files = glob.glob(os.path.join(one_data_dir,
-                                                 basename + '_c*_maps.mat'))
+        one_dir_maps_files = glob.glob(
+            os.path.join(one_data_dir, basename + '_c*_maps.mat'))
+        # only get the info file and frames for heatmaps that exist
         one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat', 
                                  one_dir_maps_files)
         one_dir_frames_paths = map(lambda fn: fn[:-9] + '_frames',
@@ -46,7 +47,8 @@ if __name__ == '__main__':
                         saver_path=SAVER_PATH,
                         restore_model=True,
                         mesh_loss=True,
-                        smpl_model=smpl_neutral)
+                        smpl_model=smpl_neutral,
+                        discriminator=True)
 
     with pm_3d.graph.as_default():
         dataset = tf.data.Dataset.from_tensor_slices(
@@ -56,4 +58,4 @@ if __name__ == '__main__':
             tf.data.Dataset.from_tensor_slices(
                 tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp], 
                                 [tf.float32, tf.float32, tf.float32, tf.float32]))))
-    pm_3d.train(dataset, epochs=10000, batch_size=20)
+    pm_3d.train(dataset, epochs=1000, batch_size=40)
