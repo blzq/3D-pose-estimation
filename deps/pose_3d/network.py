@@ -79,8 +79,11 @@ def _xception_block(inputs, training: bool):
 def build_discriminator(inputs):
     with tf.variable_scope('discriminator'):
         batch_size = tf.shape(inputs)[0]
+        # Reshape from (batch, 24, 3) to (batch * 24, 3) 
+        # 23 + 1 is num_joints + global rotation
         inputs_rot_mat = rodrigues_batch(tf.reshape(inputs, [-1, 3]))
-        inputs_rot_mat = tf.reshape(inputs_rot_mat, [batch_size, 23, 3, 3])
+        # Reshape from (batch * 24, 3, 3) to (batch, 24, 3, 3)
+        inputs_rot_mat = tf.reshape(inputs_rot_mat, [batch_size, 24, 3, 3])
         inputs_rot_mat = tf.transpose(inputs_rot_mat, [0, 2, 3, 1])
         init_conv = tf.layers.conv2d(inputs_rot_mat, 1024, [3, 3])
         init_relu = tf.nn.relu(init_conv)

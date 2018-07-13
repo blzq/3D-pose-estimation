@@ -20,15 +20,17 @@ from pose_3d.data_helpers import *
 
 from tf_smpl.batch_smpl import SMPL
 
-SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3dpose'
-SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
+SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
+SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
     in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     in_im = cv2.resize(in_im, dsize=(160, 120),
-               interpolation=cv2.INTER_AREA)
+                       interpolation=cv2.INTER_AREA)
+    in_im = cv2.normalize(in_im.astype('float'), None, 
+                          0.0, 1.0, cv2.NORM_MINMAX) ]
 
     estimator = OpPoseEstimator(get_graph_path('cmu'))
     
@@ -37,12 +39,17 @@ def main():
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     inputs = np.concatenate([heatmaps, in_im[np.newaxis]], axis=3)
+    
+    # with global default graph
+    graph = tf.get_default_graph()
 
     pm_3d = PoseModel3d((None, 120, 160, 22),
+                        graph,
                         training=False,
                         summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
-                        restore_model=True)
+                        restore_model=True,
+                        discriminator=False)
     out_vals = pm_3d.estimate(inputs)
 
     print(out_vals)
@@ -58,8 +65,7 @@ def main():
     verts, _, _ = smpl(beta, pose, get_skin=True)
     verts = verts[0]
 
-    with tf.Session() as sess:
-        result = sess.run(verts)
+    result = tf.Session().run(verts)
 
     dirpath = os.path.dirname(os.path.realpath(__file__))
     faces = np.load(os.path.join(dirpath, '..', 'deps', 'tf_smpl', 

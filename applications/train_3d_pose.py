@@ -15,7 +15,7 @@ from pose_3d.data_helpers import read_maps_poses_images
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
-SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose'
+SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
 if __name__ == '__main__':
     dataset_dir = os.path.realpath(DATASET_PATH)
@@ -41,21 +41,25 @@ if __name__ == '__main__':
         info_files.extend(one_dir_info_files)
         frames_paths.extend(one_dir_frames_paths)
 
-    pm_3d = PoseModel3d((None, 120, 160, 22),
-                        training=True,
-                        summary_dir=SUMMARY_DIR,
-                        saver_path=SAVER_PATH,
-                        restore_model=True,
-                        mesh_loss=True,
-                        smpl_model=smpl_neutral,
-                        discriminator=True)
-
-    with pm_3d.graph.as_default():
+    graph = tf.Graph()
+    with graph.as_default():
         dataset = tf.data.Dataset.from_tensor_slices(
             (maps_files, info_files, frames_paths))
 
         dataset = dataset.flat_map(lambda mf, pf, fp: 
             tf.data.Dataset.from_tensor_slices(
                 tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp], 
-                                [tf.float32, tf.float32, tf.float32, tf.float32]))))
-    pm_3d.train(dataset, epochs=1000, batch_size=40)
+                                [tf.float32, tf.float32, tf.float32]))))
+    
+    pm_3d = PoseModel3d((None, 120, 160, 22),
+                        graph,
+                        training=True,
+                        train_dataset=dataset,
+                        summary_dir=SUMMARY_DIR,
+                        saver_path=SAVER_PATH,
+                        restore_model=True,
+                        mesh_loss=True,
+                        smpl_model=smpl_neutral,
+                        discriminator=True)
+    
+    pm_3d.train(batch_size=20, epochs=1000)

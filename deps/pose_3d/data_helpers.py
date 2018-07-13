@@ -20,6 +20,9 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
 
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
+    frames = [ cv2.normalize(frame.astype('float'), None, 
+                             0.0, 1.0, cv2.NORM_MINMAX)
+               for frame in frames ]
     frames = [ cv2.resize(frame, 
                           dsize=(heatmaps.shape[2], heatmaps.shape[1]),
                           interpolation=cv2.INTER_AREA)
@@ -33,7 +36,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     shapes = shapes[:min_length]
     frames = frames[:min_length]
 
-    concat = np.concatenate([heatmaps[:18], frames], axis=3)
+    concat = np.concatenate([heatmaps, frames], axis=3)
 
     return concat, poses, shapes
 

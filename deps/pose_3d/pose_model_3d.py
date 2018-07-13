@@ -5,38 +5,46 @@ import os.path
 
 import tensorflow as tf
 from .network import build_model, build_discriminator
+from . import config
 from tf_smpl.batch_smpl import SMPL
 from tf_rodrigues.rodrigues import rodrigues_batch
 
 class PoseModel3d:
-    def __init__(self, input_shape,
+    def __init__(self, 
+                 input_shape,
+                 graph=None,
                  training=False,
-                 summary_dir='/tmp/tensorflow_logs',
-                 saver_path='/tmp/tensorflow_ckpts/3d_pose',
+                 train_dataset=None,
+                 summary_dir='/tmp/tf_logs/3d_pose/',
+                 saver_path='/tmp/tf_ckpts/3d_pose/ckpts/3d_pose.ckpt',
                  restore_model=True,
                  mesh_loss=False,
                  smpl_model=None,
                  discriminator=False):
-        self.graph = tf.Graph()
+        self.graph = graph if graph != None else tf.get_default_graph()
         with self.graph.as_default():
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True  # noqa
             self.sess = tf.Session(config=config)
 
-            self.input_handle = tf.placeholder(tf.string, shape=[])
-            iterator = tf.data.Iterator.from_string_handle(
-                self.input_handle, tf.float32, input_shape)
-            next_input = iterator.get_next()[0]
-            self.outputs = build_model(next_input, training)
-            
             self.discriminator = discriminator
-            if self.discriminator:
-                self.d_input_handle = tf.placeholder(tf.string, shape=[])
-                discrim_iterator = tf.data.Iterator.from_string_handle(
-                    self.d_input_handle, tf.float32, [None, 72])
-                next_d_input = discrim_iterator.get_next()
-                combined_in = tf.concat([self.outputs, next_d_input], 0)
-                self.discrim_outputs = build_discriminator(combined_in)
+            if training:
+                self.dataset = train_dataset
+                self.input_handle = tf.placeholder(tf.string, shape=[])
+                iterator = tf.data.Iterator.from_string_handle(
+                    self.input_handle, 
+                    self.dataset.output_types, self.dataset.output_shapes)
+                self.next_input = iterator.get_next()
+                self.input_placeholder = tf.placeholder_with_default(
+                    self.next_input[0], input_shape)
+                self.outputs = build_model(self.input_placeholder, training)
+                if self.discriminator:
+                    combin_in = tf.concat(
+                        [self.next_input[1], self.outputs], 0)
+                    self.discrim_outputs = build_discriminator(combin_in)
+            else:
+                self.input_placeholder = tf.placeholder(tf.float32, input_shape)
+                self.outputs = build_model(self.input_placeholder, training)
 
             self.saver_path = saver_path
             self.saver = tf.train.Saver()
@@ -51,59 +59,55 @@ class PoseModel3d:
 
             self.sess.run(tf.global_variables_initializer())
 
-            if restore_model:
-                ok_colour = '\033[92m'
-                warn_colour = '\033[93m'
-                normal_colour = '\033[0m'
-
-                restore_path = os.path.dirname(self.saver_path)
-                restore_ckpt = tf.train.latest_checkpoint(restore_path)
-                if restore_ckpt != None:
-                    try:
-                        self.saver.restore(self.sess, restore_ckpt)
-                        print(
-                            "{}Model restored from checkpoint at {}{}".format(
-                            ok_colour, self.saver_path, normal_colour))
-                    except:
-                        print(
-                          "{}Invalid model checkpoint found for given path {}"
-                          "\nContinuing without loading model{}".format(
-                          warn_colour, self.saver_path, normal_colour))
-
-                else:
-                    print("{}No model checkpoint found for given path {}"
-                          "\nContinuing without loading model{}".format(
-                          warn_colour, self.saver_path, normal_colour))
-
+            self.restore = restore_model
+                
     def save_model(self, save_model_path: str):
         tf.saved_model.simple_save(self.sess, save_model_path,
-                                   {'model_in': self.inputs},
+                                   {'model_in': self.input_placeholder},
                                    {'model_out': self.outputs})
+                                
+    def restore_from_checkpoint(self):
+        with self.graph.as_default():
+            # terminal colours for printing
+            ok_col, warn_col, normal_col = '\033[92m', '\033[93m', '\033[0m'
+
+            restore_path = os.path.dirname(self.saver_path)
+            restore_ckpt = tf.train.latest_checkpoint(restore_path)
+            if restore_ckpt != None:
+                try:
+                    self.saver.restore(self.sess, restore_ckpt)
+                    print(
+                        "{}Model restored from checkpoint at {}{}".format(
+                        ok_col, self.saver_path, normal_col))
+                except:
+                    print(
+                        "{}Invalid model checkpoint found for given path {}"
+                        "\nContinuing without loading model{}".format(
+                        warn_col, self.saver_path, normal_col))
+            else:
+                print("{}No model checkpoint found for given path {}"
+                        "\nContinuing without loading model{}".format(
+                        warn_col, self.saver_path, normal_col))
 
     def estimate(self, input_inst):
         with self.graph.as_default():
-            merged_summary = tf.summary.merge_all()
-            out, summary = self.sess.run((self.outputs, merged_summary),
-                                         feed_dict={self.inputs: input_inst})
-            self.summary_writer.add_summary(summary)
+            if self.restore:
+                self.restore_from_checkpoint()
+            summary = tf.summary.merge_all()
+            out, summary_val = self.sess.run(
+                (self.outputs, summary), feed_dict={self.input_placeholder: input_inst})
+            self.summary_writer.add_summary(summary_val)
         return out
 
-    def train(self, dataset, epochs: int, batch_size: int):
+    def train(self, batch_size: int, epochs: int):
         with self.graph.as_default():
-            dataset = dataset.shuffle(batch_size * 10)
-            dataset = dataset.batch(batch_size)
-            iterator = dataset.make_initializable_iterator()
-            heatmaps, gt_pose, betas, frames = iterator.get_next()
-
-            # tensorboard visualise inputs
-            # reduced_heatmaps = tf.reduce_sum(
-            #     heatmaps[:, :, :, :18], axis=3, keepdims=True)
-            # tf.summary.image('heatmaps', reduced_heatmaps)
-            # tf.summary.image('input_image', frames)
-
-            input_stack = tf.concat([heatmaps, frames], axis=3)
+            self.dataset = self.dataset.shuffle(batch_size * 10)
+            self.dataset = self.dataset.batch(batch_size)
+            iterator = self.dataset.make_initializable_iterator()
+            train_handle = self.sess.run(iterator.string_handle())
             
-
+            _, gt_pose, betas = self.next_input
+            
             with tf.variable_scope("rodrigues"):
                 out_mat = rodrigues_batch(tf.reshape(self.outputs, [-1, 3]))
                 gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))            
@@ -114,7 +118,7 @@ class PoseModel3d:
 
             reg_loss = tf.losses.mean_squared_error(
                 labels=tf.zeros(tf.shape(gt_pose)), predictions=self.outputs)
-            scaled_reg_loss = reg_loss * 0.1
+            scaled_reg_loss = reg_loss * config.reg_loss_scale
             tf.summary.scalar('reg_loss', scaled_reg_loss)
 
             total_loss = pose_loss + scaled_reg_loss
@@ -126,9 +130,8 @@ class PoseModel3d:
 
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_meshes, predictions=output_meshes)
-                scaled_mesh_loss = mesh_loss * 2
+                scaled_mesh_loss = mesh_loss * config.mesh_loss_scale
                 tf.summary.scalar('mesh_loss', scaled_mesh_loss)
-
                 total_loss += scaled_mesh_loss
             
             if self.discriminator:
@@ -137,17 +140,24 @@ class PoseModel3d:
 
                 disc_real_loss = tf.losses.mean_squared_error(
                     discrim_real_out, tf.ones(tf.shape(gt_pose)))
+                tf.summary.scalar('discriminator_real_loss', disc_real_loss)
                 disc_fake_loss = tf.losses.mean_squared_error(
                     discrim_pred_out, tf.zeros(tf.shape(self.outputs)))
+                tf.summary.scalar('discriminator_fake_loss', disc_fake_loss)
                 disc_enc_loss = tf.losses.mean_squared_error(
                     discrim_pred_out, tf.ones(tf.shape(self.outputs)))
-                tf.summary.scalar('discriminator_loss', disc_enc_loss)
+                disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
+                tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss)
                 disc_optimizer = tf.train.AdamOptimizer()
+                discriminator_vars = tf.get_collection(
+                    tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
+                train_d_real = disc_optimizer.minimize(
+                    disc_real_loss, var_list=discriminator_vars)
+                train_d_fake = disc_optimizer.minimize(
+                    disc_fake_loss, var_list=discriminator_vars)
                 self.sess.run(tf.variables_initializer(
                     disc_optimizer.variables()))
-                train_d_real = disc_optimizer.minimize(disc_real_loss)
-                train_d_fake = disc_optimizer.minimize(disc_fake_loss)
-                total_loss += disc_enc_loss
+                total_loss += disc_enc_scaled_loss
 
             tf.summary.scalar('total_loss', total_loss)
             summary = tf.summary.merge_all()
@@ -155,27 +165,31 @@ class PoseModel3d:
             optimizer = tf.train.AdamOptimizer()
             train = optimizer.minimize(total_loss)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
+            
+            if self.restore:
+                self.restore_from_checkpoint()
 
             self.summary_writer.add_graph(self.graph)
 
             for i in range(epochs):
                 self.sess.run(iterator.initializer)
+                feed = {self.input_handle: train_handle}
+                j = 0
                 while True:
+                    j += 1
+                    if j % 1000 == 0:
+                        self.saver.save(self.sess, 
+                                        self.saver_path, global_step=i)
                     try:
-                        next_input = self.sess.run(input_stack)
-                        feed = {self.inputs: next_input}
                         if self.discriminator:
-                            next_gt = self.sess.run(gt_pose)
-                            feed[self.discrim_in] = next_gt
-
-                        if self.discriminator:
-                            _, _, _, summary_val = self.sess.run(
-                                (train, train_d_fake, train_d_real, summary), 
+                            _, summary_eval, _, _ = self.sess.run(
+                                (train, summary, train_d_real, train_d_fake),
                                 feed_dict=feed)
                         else:
-                            _, summary_val = self.sess.run(
-                                train, summary)
-                        self.summary_writer.add_summary(summary_val, i)
+                            _, summary_eval = self.sess.run(
+                                (train, summary),
+                                feed_dict=feed)
+                        self.summary_writer.add_summary(summary_eval, i)
                     except tf.errors.OutOfRangeError:
                         break
                 self.saver.save(self.sess, self.saver_path, global_step=i)
