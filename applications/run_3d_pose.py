@@ -30,7 +30,7 @@ def main():
     in_im = cv2.resize(in_im, dsize=(160, 120),
                        interpolation=cv2.INTER_AREA)
     in_im = cv2.normalize(in_im.astype('float'), None, 
-                          0.0, 1.0, cv2.NORM_MINMAX) ]
+                          0.0, 1.0, cv2.NORM_MINMAX)
 
     estimator = OpPoseEstimator(get_graph_path('cmu'))
     

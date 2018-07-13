@@ -47,7 +47,7 @@ class PoseModel3d:
                 self.outputs = build_model(self.input_placeholder, training)
 
             self.saver_path = saver_path
-            self.saver = tf.train.Saver()
+            self.saver = None
 
             subdir = 'train' if training else 'test'
             self.summary_writer = tf.summary.FileWriter(
@@ -96,6 +96,8 @@ class PoseModel3d:
 
     def estimate(self, input_inst):
         with self.graph.as_default():
+            if self.saver is None:
+                self.saver = tf.train.Saver()
             if self.restore:
                 self.restore_from_checkpoint()
             summary = tf.summary.merge_all()
@@ -174,6 +176,8 @@ class PoseModel3d:
             train = optimizer.minimize(total_loss, var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
             
+            if self.saver is None:
+                self.saver = tf.train.Saver()
             if self.restore:
                 self.restore_from_checkpoint()
 
@@ -184,10 +188,6 @@ class PoseModel3d:
                 feed = {self.input_handle: train_handle}
                 j = 0
                 while True:
-                    j += 1
-                    if j % 1000 == 0:
-                        self.saver.save(self.sess, 
-                                        self.saver_path, global_step=i)
                     try:
                         if self.discriminator:
                             _, summary_eval, _, _ = self.sess.run(
@@ -198,6 +198,10 @@ class PoseModel3d:
                                 (train, summary),
                                 feed_dict=feed)
                         self.summary_writer.add_summary(summary_eval, i)
+                    if j % 1000 == 0:
+                        self.saver.save(self.sess, 
+                                        self.saver_path, global_step=i)
+                    j += 1
                     except tf.errors.OutOfRangeError:
                         break
                 self.saver.save(self.sess, self.saver_path, global_step=i)
