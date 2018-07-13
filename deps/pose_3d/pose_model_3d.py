@@ -60,6 +60,7 @@ class PoseModel3d:
             self.sess.run(tf.global_variables_initializer())
 
             self.restore = restore_model
+            self.already_restored = False
                 
     def save_model(self, save_model_path: str):
         with self.graph.as_default():
@@ -69,6 +70,8 @@ class PoseModel3d:
                                 
     def restore_from_checkpoint(self):
         with self.graph.as_default():
+            if self.already_restored:
+                return
             # terminal colours for printing
             ok_col, warn_col, normal_col = '\033[92m', '\033[93m', '\033[0m'
 
@@ -80,6 +83,7 @@ class PoseModel3d:
                     print(
                         "{}Model restored from checkpoint at {}{}".format(
                         ok_col, self.saver_path, normal_col))
+                    self.already_restored = True
                 except:
                     print(
                         "{}Invalid model checkpoint found for given path {}"
