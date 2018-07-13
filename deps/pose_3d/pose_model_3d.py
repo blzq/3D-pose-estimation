@@ -198,11 +198,10 @@ class PoseModel3d:
                                 (train, summary),
                                 feed_dict=feed)
                         self.summary_writer.add_summary(summary_eval, i)
+                    except tf.errors.OutOfRangeError:
+                        break
                     if j % 1000 == 0:
                         self.saver.save(self.sess, 
                                         self.saver_path, global_step=i)
-                    j += 1
-                    except tf.errors.OutOfRangeError:
-                        break
                 self.saver.save(self.sess, self.saver_path, global_step=i)
 
