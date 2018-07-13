@@ -62,9 +62,10 @@ class PoseModel3d:
             self.restore = restore_model
                 
     def save_model(self, save_model_path: str):
-        tf.saved_model.simple_save(self.sess, save_model_path,
-                                   {'model_in': self.input_placeholder},
-                                   {'model_out': self.outputs})
+        with self.graph.as_default():
+            tf.saved_model.simple_save(self.sess, save_model_path,
+                                       {'model_in': self.input_placeholder},
+                                       {'model_out': self.outputs})
                                 
     def restore_from_checkpoint(self):
         with self.graph.as_default():
@@ -95,7 +96,8 @@ class PoseModel3d:
                 self.restore_from_checkpoint()
             summary = tf.summary.merge_all()
             out, summary_val = self.sess.run(
-                (self.outputs, summary), feed_dict={self.input_placeholder: input_inst})
+                (self.outputs, summary), 
+                feed_dict={self.input_placeholder: input_inst})
             self.summary_writer.add_summary(summary_val)
         return out
 
@@ -124,12 +126,12 @@ class PoseModel3d:
             total_loss = pose_loss + scaled_reg_loss
 
             if self.mesh_loss:
-                output_meshes, _, _ = self.smpl(betas, self.outputs, get_skin=True)
+                out_meshes, _, _ = self.smpl(betas, self.outputs, get_skin=True)
 
                 gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
 
                 mesh_loss = tf.losses.mean_squared_error(
-                    labels=gt_meshes, predictions=output_meshes)
+                    labels=gt_meshes, predictions=out_meshes)
                 scaled_mesh_loss = mesh_loss * config.mesh_loss_scale
                 tf.summary.scalar('mesh_loss', scaled_mesh_loss)
                 total_loss += scaled_mesh_loss
@@ -163,7 +165,9 @@ class PoseModel3d:
             summary = tf.summary.merge_all()
 
             optimizer = tf.train.AdamOptimizer()
-            train = optimizer.minimize(total_loss)
+            encoder_vars = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
+            train = optimizer.minimize(total_loss, var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
             
             if self.restore:

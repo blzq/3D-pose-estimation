@@ -5,43 +5,44 @@ import tensorflow as tf
 from tf_rodrigues.rodrigues import rodrigues_batch
 
 def build_model(inputs, training: bool):
-    with tf.variable_scope('init_conv'):
-        init_conv1 = tf.layers.conv2d(inputs, 36, [3, 3], 1)
-        bn1 = tf.layers.batch_normalization(init_conv1, training=training)
-        conv_relu1 = tf.nn.relu(bn1)
-        init_conv2 = tf.layers.conv2d(conv_relu1, 72, [3, 3], 1)
-        bn2 = tf.layers.batch_normalization(init_conv2, training=training)
-        conv_relu2 = tf.nn.relu(bn2)
+    with tf.variable_scope('encoder'):
+        with tf.variable_scope('init_conv'):
+            init_conv1 = tf.layers.conv2d(inputs, 36, [3, 3], 1)
+            bn1 = tf.layers.batch_normalization(init_conv1, training=training)
+            conv_relu1 = tf.nn.relu(bn1)
+            init_conv2 = tf.layers.conv2d(conv_relu1, 72, [3, 3], 1)
+            bn2 = tf.layers.batch_normalization(init_conv2, training=training)
+            conv_relu2 = tf.nn.relu(bn2)
 
-    with tf.variable_scope('xception1'):
-        xc1 = _xception_block(conv_relu2, training)
-    
-    with tf.variable_scope('xception2'):
-        xc2 = _xception_block(xc1, training)
+        with tf.variable_scope('xception1'):
+            xc1 = _xception_block(conv_relu2, training)
+        
+        with tf.variable_scope('xception2'):
+            xc2 = _xception_block(xc1, training)
 
-    with tf.variable_scope('xception3'):
-        xc3 = _xception_block(xc2, training)
+        with tf.variable_scope('xception3'):
+            xc3 = _xception_block(xc2, training)
 
-    with tf.variable_scope('init_dense'):
-        flatten = tf.layers.flatten(xc3)
-        init_linear1 = tf.layers.dense(flatten, 144)
-        linear_relu1 = tf.nn.relu(init_linear1)
-        init_linear2 = tf.layers.dense(linear_relu1, 1024)
-        linear_relu2 = tf.nn.relu(init_linear2)
+        with tf.variable_scope('init_dense'):
+            flatten = tf.layers.flatten(xc3)
+            init_linear1 = tf.layers.dense(flatten, 144)
+            linear_relu1 = tf.nn.relu(init_linear1)
+            init_linear2 = tf.layers.dense(linear_relu1, 1024)
+            linear_relu2 = tf.nn.relu(init_linear2)
 
-    with tf.variable_scope('bl_res1'):
-        bl1 = _bilinear_residual_block(linear_relu2, training)
+        with tf.variable_scope('bl_res1'):
+            bl1 = _bilinear_residual_block(linear_relu2, training)
 
-    with tf.variable_scope('bl_res2'):
-        bl2 = _bilinear_residual_block(bl1, training)
+        with tf.variable_scope('bl_res2'):
+            bl2 = _bilinear_residual_block(bl1, training)
 
-    with tf.variable_scope('bl_res3'):
-        bl3 = _bilinear_residual_block(bl2, training)
+        with tf.variable_scope('bl_res3'):
+            bl3 = _bilinear_residual_block(bl2, training)
 
-    with tf.variable_scope('out_fc'):
-        out = tf.layers.dense(bl3, 72)
+        with tf.variable_scope('out_fc'):
+            out = tf.layers.dense(bl3, 72)
 
-    tf.summary.histogram('out', out)
+        tf.summary.histogram('out', out)
 
     return out
 
