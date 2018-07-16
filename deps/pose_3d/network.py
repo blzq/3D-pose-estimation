@@ -3,8 +3,10 @@
 
 import tensorflow as tf
 from tf_rodrigues.rodrigues import rodrigues_batch
+from tf_pose.common import CocoPart
 
-def build_model(inputs, training: bool):
+
+def build_model(inputs, inputs_locs, training: bool):
     with tf.variable_scope('encoder'):
         with tf.variable_scope('init_conv'):
             init_conv1 = tf.layers.conv2d(inputs, 36, [3, 3], 1)
@@ -22,10 +24,17 @@ def build_model(inputs, training: bool):
 
         with tf.variable_scope('xception3'):
             xc3 = _xception_block(xc2, training)
+        
+        with tf.variable_scope('xception_out'):
+            xc_out = tf.layers.separable_conv2d(xc3, 144, [3, 3])
+            xc_relu = tf.nn.relu(xc_out)
+            xc_pool = tf.reduce_mean(xc_relu, axis=[1, 2])
 
         with tf.variable_scope('init_dense'):
-            flatten = tf.layers.flatten(xc3)
-            init_linear1 = tf.layers.dense(flatten, 144)
+            features_flat = tf.layers.flatten(xc_pool)
+            locations_flat = tf.layers.flatten(inputs_locs)
+            in_concat = tf.concat([features_flat, locations_flat], axis=1)
+            init_linear1 = tf.layers.dense(in_concat, 144)
             linear_relu1 = tf.nn.relu(init_linear1)
             init_linear2 = tf.layers.dense(linear_relu1, 1024)
             linear_relu2 = tf.nn.relu(init_linear2)
@@ -76,6 +85,7 @@ def _xception_block(inputs, training: bool):
     
     add = tf.add(bn_skip, maxpool2)
     return add
+
 
 def build_discriminator(inputs):
     with tf.variable_scope('discriminator'):

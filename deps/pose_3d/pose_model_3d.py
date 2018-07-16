@@ -9,6 +9,7 @@ from . import config
 from tf_smpl.batch_smpl import SMPL
 from tf_rodrigues.rodrigues import rodrigues_batch
 
+
 class PoseModel3d:
     def __init__(self, 
                  input_shape,
@@ -35,16 +36,23 @@ class PoseModel3d:
                     self.input_handle, 
                     self.dataset.output_types, self.dataset.output_shapes)
                 self.next_input = iterator.get_next()
+                # placeholders for shape inference
                 self.input_placeholder = tf.placeholder_with_default(
                     self.next_input[0], input_shape)
-                self.outputs = build_model(self.input_placeholder, training)
+                self.input_placeholder_loc = tf.placeholder_with_default(
+                    self.next_input[3], [None, 18, 2])
+                self.outputs = build_model(
+                    self.input_placeholder, self.input_placeholder_loc, training)
                 if self.discriminator:
                     combin_in = tf.concat(
                         [self.next_input[1], self.outputs], 0)
                     self.discrim_outputs = build_discriminator(combin_in)
             else:
                 self.input_placeholder = tf.placeholder(tf.float32, input_shape)
-                self.outputs = build_model(self.input_placeholder, training)
+                self.input_placeholder_loc = tf.placeholder(
+                    tf.float32, [None, 18, 2])
+                self.outputs = build_model(
+                    self.input_placeholder, self.input_placeholder_loc, training)
 
             self.saver_path = saver_path
             self.saver = None
@@ -65,8 +73,9 @@ class PoseModel3d:
     def save_model(self, save_model_path: str):
         with self.graph.as_default():
             tf.saved_model.simple_save(self.sess, save_model_path,
-                                       {'model_in': self.input_placeholder},
-                                       {'model_out': self.outputs})
+                                       {'in': self.input_placeholder, 
+                                        'in_loc': self.input_placeholder_loc},
+                                       {'out': self.outputs})
                                 
     def restore_from_checkpoint(self):
         with self.graph.as_default():
@@ -94,7 +103,7 @@ class PoseModel3d:
                         "\nContinuing without loading model{}".format(
                         warn_col, self.saver_path, normal_col))
 
-    def estimate(self, input_inst):
+    def estimate(self, input_inst, input_loc):
         with self.graph.as_default():
             if self.saver is None:
                 self.saver = tf.train.Saver()
@@ -103,7 +112,8 @@ class PoseModel3d:
             summary = tf.summary.merge_all()
             out, summary_val = self.sess.run(
                 (self.outputs, summary), 
-                feed_dict={self.input_placeholder: input_inst})
+                feed_dict={self.input_placeholder: input_inst,
+                           self.input_placeholder_loc: input_loc})
             self.summary_writer.add_summary(summary_val)
         return out
 
@@ -114,7 +124,7 @@ class PoseModel3d:
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
             
-            _, gt_pose, betas = self.next_input
+            _, gt_pose, betas, _ = self.next_input
             
             with tf.variable_scope("rodrigues"):
                 out_mat = rodrigues_batch(tf.reshape(self.outputs, [-1, 3]))

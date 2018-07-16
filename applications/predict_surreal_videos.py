@@ -48,7 +48,7 @@ def process_video(in_file, out_dir, estimator):
         _, color_im = capture.retrieve()
         color_im = cv2.cvtColor(color_im, cv2.COLOR_BGR2RGB)
 
-        human = estimator.inference(color_im, upsample_size=4.0)
+        human = estimator.inference(color_im, upsample_size=8.0)
 
         try:
             human = human[0]

@@ -6,7 +6,9 @@ import glob
 import scipy.io
 import cv2
 import numpy as np
-import tensorflow as tf
+
+from tf_pose.common import CocoPart
+
 
 def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
@@ -37,6 +39,38 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     frames = frames[:min_length]
 
     concat = np.concatenate([heatmaps, frames], axis=3)
+    locations = heatmaps_to_locations(concat)
 
-    return concat, poses, shapes
+    return concat, poses, shapes, locations
 
+
+def heatmaps_to_locations(heatmaps_image_stack):
+    heatmaps = heatmaps_image_stack[:, :, :, :18]
+    # heatmaps: (batch, h, w, c)
+    hs = heatmaps.shape
+    heatmaps_flat = np.reshape(heatmaps, [hs[0], hs[1] * hs[2], hs[3]])
+    # heatmaps_flat: (batch, h * w, c)
+    heatmaps_flat = np.transpose(heatmaps_flat, [0, 2, 1])
+    # heatmaps_flat: (batch, c, h * w)
+    argmax = np.argmax(heatmaps_flat, axis=2)
+    # argmax: (batch, c)
+    argmax = np.reshape(argmax, [-1])
+    # argmax: (batch * c)
+    locations = np.unravel_index(argmax, [hs[1], hs[2]])
+    # locations: (2, batch * c)
+    locations = np.transpose(locations, [1, 0])
+    # locations: (batch * c, 2)
+    locations = np.reshape(locations, [hs[0], hs[3], 2])
+    # locations: (batch, c, 2 = [y, x])
+    locations = locations.astype(np.float32)
+    # Normalize centre of person as middle of left and right hips
+    rhip_idx = CocoPart.RHip.value
+    lhip_idx = CocoPart.LHip.value
+    centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
+    locations = locations - centres[:, np.newaxis]
+    locations = np.reshape(locations, [hs[0], -1])
+    # Normalize joint locations to [-1, 1] in x and y
+    maxs = np.amax(np.abs(locations), axis=1, keepdims=True)
+    locations = locations / maxs
+
+    return locations

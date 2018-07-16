@@ -39,6 +39,7 @@ def main():
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     inputs = np.concatenate([heatmaps, in_im[np.newaxis]], axis=3)
+    input_locs = heatmaps_to_locations(inputs)
     
     # with global default graph
     graph = tf.get_default_graph()
@@ -50,7 +51,7 @@ def main():
                         saver_path=SAVER_PATH,
                         restore_model=True,
                         discriminator=False)
-    out_vals = pm_3d.estimate(inputs)
+    out_vals = pm_3d.estimate(inputs, input_locs)
 
     print(out_vals)
 
