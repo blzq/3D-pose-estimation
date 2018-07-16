@@ -39,10 +39,10 @@ def main():
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     inputs = np.concatenate([heatmaps, in_im[np.newaxis]], axis=3)
-    input_locs = heatmaps_to_locations(inputs)
+    input_locs = heatmaps_to_locations(inputs).reshape([1, 18, 2])
     
     # with global default graph
-    graph = tf.get_default_graph()
+    graph = tf.Graph()
 
     pm_3d = PoseModel3d((None, 120, 160, 22),
                         graph,
