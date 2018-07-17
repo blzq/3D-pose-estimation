@@ -19,7 +19,7 @@ SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
 if __name__ == '__main__':
     dataset_dir = os.path.realpath(DATASET_PATH)
-    basenames = os.listdir(dataset_dir)
+    basenames = sorted(os.listdir(dataset_dir))
 
     smpl_path = os.path.join(
         __init__.project_path, 'data', 'SMPL_model', 'models_numpy')
@@ -28,12 +28,12 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames:
+    for basename in basenames[:1]:
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = glob.glob(
             os.path.join(one_data_dir, basename + '_c*_maps.mat'))
         # only get the info file and frames for heatmaps that exist
-        one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat', 
+        one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat',
                                  one_dir_maps_files)
         one_dir_frames_paths = map(lambda fn: fn[:-9] + '_frames',
                                    one_dir_maps_files)
@@ -46,12 +46,13 @@ if __name__ == '__main__':
         dataset = tf.data.Dataset.from_tensor_slices(
             (maps_files, info_files, frames_paths))
 
-        dataset = dataset.flat_map(lambda mf, pf, fp: 
+        dataset = dataset.flat_map(lambda mf, pf, fp:
             tf.data.Dataset.from_tensor_slices(
-                tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp], 
-                                [tf.float32, tf.float32, tf.float32, tf.float32]))))
-    
-    pm_3d = PoseModel3d((None, 120, 160, 22),
+                tuple(tf.py_func(
+                    read_maps_poses_images, [mf, pf, fp],
+                    [tf.float32, tf.float32, tf.float32, tf.float32]))))
+
+    pm_3d = PoseModel3d((None, 240, 320, 22),
                         graph,
                         training=True,
                         train_dataset=dataset,
@@ -61,5 +62,5 @@ if __name__ == '__main__':
                         mesh_loss=True,
                         smpl_model=smpl_neutral,
                         discriminator=True)
-    
-    pm_3d.train(batch_size=32, epochs=1000)
+
+    pm_3d.train(batch_size=32, epochs=500)

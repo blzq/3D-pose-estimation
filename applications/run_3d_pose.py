@@ -25,27 +25,29 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
-    in_im = cv2.resize(in_im, dsize=(160, 120),
+    in_im = cv2.resize(in_im, dsize=(320, 240),
                        interpolation=cv2.INTER_AREA)
-    in_im = cv2.normalize(in_im.astype('float'), None, 
-                          0.0, 1.0, cv2.NORM_MINMAX)
 
-    estimator = OpPoseEstimator(get_graph_path('cmu'))
-    
-    humans = estimator.inference(in_im, upsample_size=4.0)
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    with tf.Graph().as_default():
+        estimator = OpPoseEstimator(get_graph_path('cmu'),
+                                    target_size=(320, 240), tf_config=config)
+    humans = estimator.inference(in_im,
+                                 resize_to_default=True, upsample_size=8.0)
     heatmaps = estimator.heatMat
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     inputs = np.concatenate([heatmaps, in_im[np.newaxis]], axis=3)
     input_locs = heatmaps_to_locations(inputs).reshape([1, 18, 2])
-    
-    # with global default graph
-    graph = tf.Graph()
 
-    pm_3d = PoseModel3d((None, 120, 160, 22),
-                        graph,
+    # with different graph
+    pm_graph = tf.Graph()
+
+    pm_3d = PoseModel3d((None, 240, 320, 22),
+                        pm_graph,
                         training=False,
                         summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
@@ -62,14 +64,14 @@ def main():
     smpl = SMPL(smpl_model_path)
     beta = tf.zeros([1, 10])
     pose = tf.constant(out_vals)
-    
+
     verts, _, _ = smpl(beta, pose, get_skin=True)
     verts = verts[0]
 
     result = tf.Session().run(verts)
 
     dirpath = os.path.dirname(os.path.realpath(__file__))
-    faces = np.load(os.path.join(dirpath, '..', 'deps', 'tf_smpl', 
+    faces = np.load(os.path.join(dirpath, '..', 'deps', 'tf_smpl',
                                  'smpl_faces.npy'))
 
     outmesh_path = os.path.join(dirpath, 'smpl_tf.obj')
@@ -86,13 +88,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-
-
-
-
-
-
-
-
-
-

@@ -22,10 +22,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
 
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
-    frames = [ cv2.normalize(frame.astype('float'), None, 
-                             0.0, 1.0, cv2.NORM_MINMAX)
-               for frame in frames ]
-    frames = [ cv2.resize(frame, 
+    frames = [ cv2.resize(frame,
                           dsize=(heatmaps.shape[2], heatmaps.shape[1]),
                           interpolation=cv2.INTER_AREA)
                for frame in frames ]
@@ -63,14 +60,16 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = np.reshape(locations, [hs[0], hs[3], 2])
     # locations: (batch, c, 2 = [y, x])
     locations = locations.astype(np.float32)
+
+    # Maybe don't want to do this part because information for camera is lost
     # Normalize centre of person as middle of left and right hips
-    rhip_idx = CocoPart.RHip.value
-    lhip_idx = CocoPart.LHip.value
-    centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
-    locations = locations - centres[:, np.newaxis]
-    locations = np.reshape(locations, [hs[0], -1])
-    # Normalize joint locations to [-1, 1] in x and y
-    maxs = np.amax(np.abs(locations), axis=1, keepdims=True)
-    locations = locations / maxs
+    # rhip_idx = CocoPart.RHip.value
+    # lhip_idx = CocoPart.LHip.value
+    # centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
+    # locations = locations - centres[:, np.newaxis]
+    # locations = np.reshape(locations, [hs[0], -1])
+    # # Normalize joint locations to [-1, 1] in x and y
+    # maxs = np.amax(np.abs(locations), axis=1, keepdims=True)
+    # locations = locations / maxs
 
     return locations

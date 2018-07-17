@@ -7,11 +7,11 @@ import tensorflow as tf
 from .network import build_model, build_discriminator
 from . import config
 from tf_smpl.batch_smpl import SMPL
-from tf_rodrigues.rodrigues import rodrigues_batch
+from tf_perspective_projection.project import rodrigues_batch, project
 
 
 class PoseModel3d:
-    def __init__(self, 
+    def __init__(self,
                  input_shape,
                  graph=None,
                  training=False,
@@ -19,6 +19,7 @@ class PoseModel3d:
                  summary_dir='/tmp/tf_logs/3d_pose/',
                  saver_path='/tmp/tf_ckpts/3d_pose/ckpts/3d_pose.ckpt',
                  restore_model=True,
+                 reproject_loss=True,
                  mesh_loss=False,
                  smpl_model=None,
                  discriminator=False):
@@ -33,7 +34,7 @@ class PoseModel3d:
                 self.dataset = train_dataset
                 self.input_handle = tf.placeholder(tf.string, shape=[])
                 iterator = tf.data.Iterator.from_string_handle(
-                    self.input_handle, 
+                    self.input_handle,
                     self.dataset.output_types, self.dataset.output_shapes)
                 self.next_input = iterator.get_next()
                 # placeholders for shape inference
@@ -62,21 +63,22 @@ class PoseModel3d:
                 os.path.join(summary_dir, subdir), self.graph)
 
             self.mesh_loss = mesh_loss
-            if self.mesh_loss:
+            self.reproject_loss = reproject_loss
+            if self.mesh_loss or self.reproject_loss:
                 self.smpl = SMPL(smpl_model)
 
             self.sess.run(tf.global_variables_initializer())
 
             self.restore = restore_model
             self.already_restored = False
-                
+
     def save_model(self, save_model_path: str):
         with self.graph.as_default():
             tf.saved_model.simple_save(self.sess, save_model_path,
-                                       {'in': self.input_placeholder, 
+                                       {'in': self.input_placeholder,
                                         'in_loc': self.input_placeholder_loc},
                                        {'out': self.outputs})
-                                
+
     def restore_from_checkpoint(self):
         with self.graph.as_default():
             if self.already_restored:
@@ -111,7 +113,7 @@ class PoseModel3d:
                 self.restore_from_checkpoint()
             summary = tf.summary.merge_all()
             out, summary_val = self.sess.run(
-                (self.outputs, summary), 
+                (self.outputs, summary),
                 feed_dict={self.input_placeholder: input_inst,
                            self.input_placeholder_loc: input_loc})
             self.summary_writer.add_summary(summary_val)
@@ -123,49 +125,71 @@ class PoseModel3d:
             self.dataset = self.dataset.batch(batch_size)
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
-            
-            _, gt_pose, betas, _ = self.next_input
-            
+
+            _, gt_pose, betas, gt_joints2d = self.next_input
+
+            out_pose = self.outputs[:, :72]
+
             with tf.variable_scope("rodrigues"):
-                out_mat = rodrigues_batch(tf.reshape(self.outputs, [-1, 3]))
-                gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))            
+                out_mat = rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
+                gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))
 
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
-            tf.summary.scalar('pose_loss', pose_loss)
+            tf.summary.scalar('pose_loss', pose_loss, family='losses')
 
             reg_loss = tf.losses.mean_squared_error(
-                labels=tf.zeros(tf.shape(gt_pose)), predictions=self.outputs)
+                labels=tf.zeros(tf.shape(gt_pose)), predictions=out_pose)
             scaled_reg_loss = reg_loss * config.reg_loss_scale
-            tf.summary.scalar('reg_loss', scaled_reg_loss)
-
+            tf.summary.scalar('reg_loss', scaled_reg_loss, family='losses')
             total_loss = pose_loss + scaled_reg_loss
 
-            if self.mesh_loss:
-                out_meshes, _, _ = self.smpl(betas, self.outputs, get_skin=True)
-
+            if self.mesh_loss or self.reproject_loss:
+                out_meshes, out_joints, _ = self.smpl(betas, out_pose, 
+                                                      get_skin=True)
                 gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
 
+            if self.mesh_loss:
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_meshes, predictions=out_meshes)
                 scaled_mesh_loss = mesh_loss * config.mesh_loss_scale
-                tf.summary.scalar('mesh_loss', scaled_mesh_loss)
+                tf.summary.scalar('mesh_loss', scaled_mesh_loss,
+                                  family='losses')
                 total_loss += scaled_mesh_loss
-            
+
+            if self.reproject_loss:
+                out_cam_pos = self.outputs[:, 72:75]
+                out_cam_rot = self.outputs[:, 75:78]
+                out_cam_foc = self.outputs[:, 78]
+                # out_joints reshape from (batch, j, 3) to (batch * j, 3)
+                out_2d = project(tf.reshape(out_joints, [-1, 3]), 
+                                 out_cam_pos, out_cam_rot, out_cam_foc)
+                out_2d = tf.gather(out_2d, [1, 0], axis=1)
+                # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
+                reproj_loss = tf.losses.mean_squared_error(
+                    out_2d, tf.reshape(gt_joints, [-1, 2])
+                scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
+                tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
+                                  family='losses')
+                total_loss += scaled_reproj_loss
+
             if self.discriminator:
                 discrim_real_out, discrim_pred_out = \
                     tf.split(self.discrim_outputs, 2, axis=0)
 
                 disc_real_loss = tf.losses.mean_squared_error(
                     discrim_real_out, tf.ones(tf.shape(gt_pose)))
-                tf.summary.scalar('discriminator_real_loss', disc_real_loss)
+                tf.summary.scalar('discriminator_real_loss', disc_real_loss,
+                                  family='discriminator')
                 disc_fake_loss = tf.losses.mean_squared_error(
-                    discrim_pred_out, tf.zeros(tf.shape(self.outputs)))
-                tf.summary.scalar('discriminator_fake_loss', disc_fake_loss)
+                    discrim_pred_out, tf.zeros(tf.shape(out_pose)))
+                tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
+                                  family='discriminator')
                 disc_enc_loss = tf.losses.mean_squared_error(
-                    discrim_pred_out, tf.ones(tf.shape(self.outputs)))
+                    discrim_pred_out, tf.ones(tf.shape(out_pose)))
                 disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
-                tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss)
+                tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
+                                  family='losses')
                 disc_optimizer = tf.train.AdamOptimizer()
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
@@ -177,7 +201,7 @@ class PoseModel3d:
                     disc_optimizer.variables()))
                 total_loss += disc_enc_scaled_loss
 
-            tf.summary.scalar('total_loss', total_loss)
+            tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
             optimizer = tf.train.AdamOptimizer()
@@ -185,7 +209,7 @@ class PoseModel3d:
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             train = optimizer.minimize(total_loss, var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
-            
+
             if self.saver is None:
                 self.saver = tf.train.Saver()
             if self.restore:
@@ -211,7 +235,7 @@ class PoseModel3d:
                     except tf.errors.OutOfRangeError:
                         break
                     if j % 1000 == 0:
-                        self.saver.save(self.sess, 
+                        self.saver.save(self.sess,
                                         self.saver_path, global_step=i)
+                    j += 1
                 self.saver.save(self.sess, self.saver_path, global_step=i)
-

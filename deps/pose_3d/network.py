@@ -9,6 +9,8 @@ from tf_pose.common import CocoPart
 def build_model(inputs, inputs_locs, training: bool):
     with tf.variable_scope('encoder'):
         with tf.variable_scope('init_conv'):
+            tf.summary.histogram('input_heatmaps', inputs[:, :, :, :19])
+            tf.summary.histogram('input_frames', inputs[:, :, :, 19:])
             init_conv1 = tf.layers.conv2d(inputs, 36, [3, 3], 1)
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
             conv_relu1 = tf.nn.relu(bn1)
@@ -17,16 +19,16 @@ def build_model(inputs, inputs_locs, training: bool):
             conv_relu2 = tf.nn.relu(bn2)
 
         with tf.variable_scope('xception1'):
-            xc1 = _xception_block(conv_relu2, training)
-        
+            xc1 = _xception_entry(conv_relu2, 128, training, init_relu=False)
+
         with tf.variable_scope('xception2'):
-            xc2 = _xception_block(xc1, training)
+            xc2 = _xception_entry(xc1, 256, training)
 
         with tf.variable_scope('xception3'):
-            xc3 = _xception_block(xc2, training)
-        
+            xc3 = _xception_entry(xc2, 728, training)
+
         with tf.variable_scope('xception_out'):
-            xc_out = tf.layers.separable_conv2d(xc3, 144, [3, 3])
+            xc_out = tf.layers.separable_conv2d(xc3, 1024, [3, 3])
             xc_relu = tf.nn.relu(xc_out)
             xc_pool = tf.reduce_mean(xc_relu, axis=[1, 2])
 
@@ -71,18 +73,22 @@ def _bilinear_residual_block(inputs, training: bool):
     return add
 
 
-def _xception_block(inputs, training: bool):
-    s_conv1 = tf.layers.separable_conv2d(inputs, 144, [3, 3], padding='same')
+def _xception_entry(inputs, filters: int, training: bool, init_relu=True):
+    if init_relu:
+        conv_in = tf.nn.relu(inputs)
+    else:
+        conv_in = inputs
+    s_conv1 = tf.layers.separable_conv2d(conv_in, filters, [3, 3], padding='same')
     bn1 = tf.layers.batch_normalization(s_conv1, training=training)
     relu1 = tf.nn.relu(bn1)
 
-    s_conv2 = tf.layers.separable_conv2d(relu1, 144, [3, 3], padding='same')
+    s_conv2 = tf.layers.separable_conv2d(relu1, filters, [3, 3], padding='same')
     bn2 = tf.layers.batch_normalization(s_conv2, training=training)
     maxpool2 = tf.layers.max_pooling2d(bn2, [3, 3], 2, padding='same')
 
-    s_conv_skip = tf.layers.conv2d(inputs, 144, [1, 1], 2)
+    s_conv_skip = tf.layers.conv2d(inputs, filters, [1, 1], 2)
     bn_skip = tf.layers.batch_normalization(s_conv_skip, training=training)
-    
+
     add = tf.add(bn_skip, maxpool2)
     return add
 
@@ -90,7 +96,7 @@ def _xception_block(inputs, training: bool):
 def build_discriminator(inputs):
     with tf.variable_scope('discriminator'):
         batch_size = tf.shape(inputs)[0]
-        # Reshape from (batch, 24, 3) to (batch * 24, 3) 
+        # Reshape from (batch, 24, 3) to (batch * 24, 3)
         # 23 + 1 is num_joints + global rotation
         inputs_rot_mat = rodrigues_batch(tf.reshape(inputs, [-1, 3]))
         # Reshape from (batch * 24, 3, 3) to (batch, 24, 3, 3)
@@ -108,7 +114,7 @@ def build_discriminator(inputs):
         relu2 = tf.nn.relu(linear2)
 
         linear3 = tf.layers.dense(relu2, 1024)
-        relu3 = tf.nn.relu(linear3)
+        relu3 = tf.nn.leaky_relu(linear3, alpha=0.15)
 
         out = tf.layers.dense(relu3, 72)
 

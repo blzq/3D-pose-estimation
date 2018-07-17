@@ -12,11 +12,14 @@ import tf_pose.common
 import numpy as np
 import scipy.io
 import cv2
+import tensorflow as tf
 
-import matplotlib.pyplot as plt
 
 def main(surreal_path):
-    estimator = OpPoseEstimator(get_graph_path('cmu'))
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    estimator = OpPoseEstimator(get_graph_path('cmu'),
+                                target_size=(320, 240), tf_config=config)
     base_path = os.path.join(surreal_path, 'data', 'cmu', 'train')
     for run in ['run0', 'run1', 'run2']:
         run_path = os.path.join(base_path, run)
@@ -29,7 +32,6 @@ def main(surreal_path):
                 video_in = os.path.join(dir_path, video_filename)
                 print(video_in)
                 process_video(video_in, dir_path, estimator)
-    return
 
 
 def process_video(in_file, out_dir, estimator):
@@ -48,17 +50,13 @@ def process_video(in_file, out_dir, estimator):
         _, color_im = capture.retrieve()
         color_im = cv2.cvtColor(color_im, cv2.COLOR_BGR2RGB)
 
-        human = estimator.inference(color_im, upsample_size=8.0)
+        human = estimator.inference(color_im, 
+                                    resize_to_default=True, upsample_size=8.0)
 
         try:
             human = human[0]
         except IndexError:
-            with open(os.path.join(
-                        os.path.realpath(os.path.dirname(__file__)),
-                        'invalid.txt'),
-                      'a') as f:
-                f.write(in_file + '\n')
-                return
+            return
 
         human, visibility = tf_pose.common.MPIIPart.from_coco(human)
 
@@ -81,5 +79,6 @@ def process_video(in_file, out_dir, estimator):
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: python3 predict_surreal_videos.py <path-to-SURREAL-dataset>")
+        sys.exit()
     surreal_path = os.path.realpath(sys.argv[1])
     sys.exit(main(surreal_path))
