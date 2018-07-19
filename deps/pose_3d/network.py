@@ -11,7 +11,11 @@ def build_model(inputs, inputs_locs, training: bool):
         with tf.variable_scope('init_conv'):
             tf.summary.histogram('input_heatmaps', inputs[:, :, :, :19])
             tf.summary.histogram('input_frames', inputs[:, :, :, 19:])
-            init_conv1 = tf.layers.conv2d(inputs, 36, [3, 3], 1)
+            in_1x1 = tf.layers.conv2d(inputs, tf.shape(inputs)[-1], [1, 1])
+            in_bn = tf.layers.batch_normalization(in_1x1, training=training)
+            in_relu = tf.nn.relu(in_bn)
+
+            init_conv1 = tf.layers.conv2d(in_relu, 36, [3, 3], 1)
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
             conv_relu1 = tf.nn.relu(bn1)
             init_conv2 = tf.layers.conv2d(conv_relu1, 72, [3, 3], 1)
@@ -75,10 +79,10 @@ def _bilinear_residual_block(inputs, training: bool):
 
 def _xception_entry(inputs, filters: int, training: bool, init_relu=True):
     if init_relu:
-        conv_in = tf.nn.relu(inputs)
+        main_in = tf.nn.relu(inputs)
     else:
-        conv_in = inputs
-    s_conv1 = tf.layers.separable_conv2d(conv_in, filters, [3, 3], padding='same')
+        main_in = inputs
+    s_conv1 = tf.layers.separable_conv2d(main_in, filters, [3, 3], padding='same')
     bn1 = tf.layers.batch_normalization(s_conv1, training=training)
     relu1 = tf.nn.relu(bn1)
 
@@ -103,18 +107,18 @@ def build_discriminator(inputs):
         inputs_rot_mat = tf.reshape(inputs_rot_mat, [batch_size, 24, 3, 3])
         inputs_rot_mat = tf.transpose(inputs_rot_mat, [0, 2, 3, 1])
         init_conv = tf.layers.conv2d(inputs_rot_mat, 1024, [3, 3])
-        init_relu = tf.nn.relu(init_conv)
+        init_relu = tf.nn.leaky_relu(init_conv)
 
         flatten = tf.layers.flatten(init_relu)
 
         linear1 = tf.layers.dense(flatten, 1024)
-        relu1 = tf.nn.relu(linear1)
+        relu1 = tf.nn.leaky_relu(linear1)
 
         linear2 = tf.layers.dense(relu1, 1024)
-        relu2 = tf.nn.relu(linear2)
+        relu2 = tf.nn.leaky_relu(linear2)
 
         linear3 = tf.layers.dense(relu2, 1024)
-        relu3 = tf.nn.leaky_relu(linear3, alpha=0.15)
+        relu3 = tf.nn.leaky_relu(linear3)
 
         out = tf.layers.dense(relu3, 72)
 

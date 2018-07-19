@@ -11,7 +11,7 @@ import tensorflow as tf
 import numpy as np
 
 from pose_3d.pose_model_3d import PoseModel3d
-from pose_3d.data_helpers import read_maps_poses_images
+from pose_3d.data_helpers import dataset_from_filenames
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames[:1]:
+    for basename in basenames:
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = glob.glob(
             os.path.join(one_data_dir, basename + '_c*_maps.mat'))
@@ -43,14 +43,7 @@ if __name__ == '__main__':
 
     graph = tf.Graph()
     with graph.as_default():
-        dataset = tf.data.Dataset.from_tensor_slices(
-            (maps_files, info_files, frames_paths))
-
-        dataset = dataset.flat_map(lambda mf, pf, fp:
-            tf.data.Dataset.from_tensor_slices(
-                tuple(tf.py_func(
-                    read_maps_poses_images, [mf, pf, fp],
-                    [tf.float32, tf.float32, tf.float32, tf.float32]))))
+        dataset = dataset_from_filenames(maps_files, info_files, frames_paths)
 
     pm_3d = PoseModel3d((None, 240, 320, 22),
                         graph,

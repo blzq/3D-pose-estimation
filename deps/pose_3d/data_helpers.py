@@ -6,8 +6,24 @@ import glob
 import scipy.io
 import cv2
 import numpy as np
+import tensorflow as tf
 
 from tf_pose.common import CocoPart
+from . import config
+
+
+def dataset_from_filenames(maps_files, info_files, frames_paths):
+    dataset = tf.data.Dataset.from_tensor_slices(
+            (maps_files, info_files, frames_paths))
+
+    dataset = dataset.interleave(lambda mf, pf, fp: 
+        tf.data.Dataset.from_tensor_slices(
+            tuple(tf.py_func(
+                read_maps_poses_images, [mf, pf, fp],
+                [tf.float32, tf.float32, tf.float32, tf.float32]))),
+                cycle_length=20, block_length=10)
+
+    return dataset
 
 
 def read_maps_poses_images(maps_file, info_file, frames_path):
@@ -22,6 +38,8 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
 
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
+    frames = [ cv2.normalize(frame, None, 0, 1, cv2.NORM_MINMAX)
+               for frame in frames ]
     frames = [ cv2.resize(frame,
                           dsize=(heatmaps.shape[2], heatmaps.shape[1]),
                           interpolation=cv2.INTER_AREA)
@@ -38,11 +56,11 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     concat = np.concatenate([heatmaps, frames], axis=3)
     locations = heatmaps_to_locations(concat)
 
-    return concat, poses, shapes, locations
+    return concat, locations, poses, shapes
 
 
 def heatmaps_to_locations(heatmaps_image_stack):
-    heatmaps = heatmaps_image_stack[:, :, :, :18]
+    heatmaps = heatmaps_image_stack[:, :, :, :config.n_joints]
     # heatmaps: (batch, h, w, c)
     hs = heatmaps.shape
     heatmaps_flat = np.reshape(heatmaps, [hs[0], hs[1] * hs[2], hs[3]])

@@ -14,46 +14,55 @@ class PoseModel3d:
     def __init__(self,
                  input_shape,
                  graph=None,
-                 training=False,
-                 train_dataset=None,
+                 mode='test',
+                 in_dataset=None,
                  summary_dir='/tmp/tf_logs/3d_pose/',
                  saver_path='/tmp/tf_ckpts/3d_pose/ckpts/3d_pose.ckpt',
                  restore_model=True,
                  reproject_loss=True,
-                 mesh_loss=False,
+                 mesh_loss=True,
                  smpl_model=None,
                  discriminator=False):
         self.graph = graph if graph != None else tf.get_default_graph()
         with self.graph.as_default():
-            config = tf.ConfigProto()
-            config.gpu_options.allow_growth = True  # noqa
-            self.sess = tf.Session(config=config)
+            tfconfig = tf.ConfigProto()
+            tfconfig.gpu_options.allow_growth = True  # noqa
+            self.sess = tf.Session(config=tfconfig)
 
             self.discriminator = discriminator
-            if training:
-                self.dataset = train_dataset
+            if mode not in ['train', 'test', 'eval']:
+                raise ValueError("mode must be 'train', 'test', or 'eval'")
+            training = mode == 'train'
+            if mode == 'train' or mode == 'eval':
+                self.dataset = in_dataset
                 self.input_handle = tf.placeholder(tf.string, shape=[])
                 iterator = tf.data.Iterator.from_string_handle(
                     self.input_handle,
                     self.dataset.output_types, self.dataset.output_shapes)
                 self.next_input = iterator.get_next()
                 # placeholders for shape inference
-                self.input_placeholder = tf.placeholder_with_default(
+                self.in_placehold = tf.placeholder_with_default(
                     self.next_input[0], input_shape)
-                self.input_placeholder_loc = tf.placeholder_with_default(
-                    self.next_input[3], [None, 18, 2])
+                self.in_placehold_loc = tf.placeholder_with_default(
+                    self.next_input[1], [None, config.n_joints, 2])
                 self.outputs = build_model(
-                    self.input_placeholder, self.input_placeholder_loc, training)
+                    self.in_placehold, self.in_placehold_loc, training)
+                self.mesh_loss = mesh_loss
+                self.reproject_loss = reproject_loss
+                if self.mesh_loss or self.reproject_loss:
+                    self.smpl = SMPL(smpl_model)
                 if self.discriminator:
-                    combin_in = tf.concat(
-                        [self.next_input[1], self.outputs], 0)
-                    self.discrim_outputs = build_discriminator(combin_in)
+                    if training:
+                        d_in = tf.concat([self.next_input[2], self.outputs], 0)
+                    else:
+                        d_in = self.outputs
+                    self.discriminator_outputs = build_discriminator(d_in)
             else:
-                self.input_placeholder = tf.placeholder(tf.float32, input_shape)
-                self.input_placeholder_loc = tf.placeholder(
-                    tf.float32, [None, 18, 2])
+                self.in_placehold = tf.placeholder(tf.float32, input_shape)
+                self.in_placehold_loc = tf.placeholder(
+                    tf.float32, [None, config.n_joints, 2])
                 self.outputs = build_model(
-                    self.input_placeholder, self.input_placeholder_loc, training)
+                    self.in_placehold, self.in_placehold_loc, training=False)
 
             self.saver_path = saver_path
             self.saver = None
@@ -61,11 +70,6 @@ class PoseModel3d:
             subdir = 'train' if training else 'test'
             self.summary_writer = tf.summary.FileWriter(
                 os.path.join(summary_dir, subdir), self.graph)
-
-            self.mesh_loss = mesh_loss
-            self.reproject_loss = reproject_loss
-            if self.mesh_loss or self.reproject_loss:
-                self.smpl = SMPL(smpl_model)
 
             self.sess.run(tf.global_variables_initializer())
 
@@ -75,17 +79,17 @@ class PoseModel3d:
     def save_model(self, save_model_path: str):
         with self.graph.as_default():
             tf.saved_model.simple_save(self.sess, save_model_path,
-                                       {'in': self.input_placeholder,
-                                        'in_loc': self.input_placeholder_loc},
+                                       {'in': self.in_placehold,
+                                        'in_loc': self.in_placehold_loc},
                                        {'out': self.outputs})
 
     def restore_from_checkpoint(self):
         with self.graph.as_default():
-            if self.already_restored:
-                return
             # terminal colours for printing
             ok_col, warn_col, normal_col = '\033[92m', '\033[93m', '\033[0m'
-
+            if self.already_restored:
+                print("{}Already restored{}".format(warn_col, normal_col))
+                return
             restore_path = os.path.dirname(self.saver_path)
             restore_ckpt = tf.train.latest_checkpoint(restore_path)
             if restore_ckpt != None:
@@ -114,8 +118,8 @@ class PoseModel3d:
             summary = tf.summary.merge_all()
             out, summary_val = self.sess.run(
                 (self.outputs, summary),
-                feed_dict={self.input_placeholder: input_inst,
-                           self.input_placeholder_loc: input_loc})
+                feed_dict={self.in_placehold: input_inst,
+                           self.in_placehold_loc: input_loc})
             self.summary_writer.add_summary(summary_val)
         return out
 
@@ -123,10 +127,11 @@ class PoseModel3d:
         with self.graph.as_default():
             self.dataset = self.dataset.shuffle(batch_size * 10)
             self.dataset = self.dataset.batch(batch_size)
+            self.dataset = self.dataset.prefetch(10)
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
-            _, gt_pose, betas, gt_joints2d = self.next_input
+            _, gt_joints2d, gt_pose, betas = self.next_input
 
             out_pose = self.outputs[:, :72]
 
@@ -167,36 +172,35 @@ class PoseModel3d:
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
                 # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.mean_squared_error(
-                    out_2d, tf.reshape(gt_joints, [-1, 2])
+                    out_2d, tf.reshape(gt_joints2d, [-1, 2]))
                 scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
                 tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
                                   family='losses')
                 total_loss += scaled_reproj_loss
 
             if self.discriminator:
-                discrim_real_out, discrim_pred_out = \
-                    tf.split(self.discrim_outputs, 2, axis=0)
+                disc_real_out, disc_pred_out = \
+                    tf.split(self.discriminator_outputs, 2, axis=0)
 
                 disc_real_loss = tf.losses.mean_squared_error(
-                    discrim_real_out, tf.ones(tf.shape(gt_pose)))
+                    disc_real_out, tf.ones(tf.shape(gt_pose)))
                 tf.summary.scalar('discriminator_real_loss', disc_real_loss,
                                   family='discriminator')
                 disc_fake_loss = tf.losses.mean_squared_error(
-                    discrim_pred_out, tf.zeros(tf.shape(out_pose)))
+                    disc_pred_out, tf.zeros(tf.shape(out_pose)))
                 tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
                                   family='discriminator')
+                disc_total_loss = disc_real_loss + disc_fake_loss
                 disc_enc_loss = tf.losses.mean_squared_error(
-                    discrim_pred_out, tf.ones(tf.shape(out_pose)))
+                    disc_pred_out, tf.ones(tf.shape(out_pose)))
                 disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
                 tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
                                   family='losses')
                 disc_optimizer = tf.train.AdamOptimizer()
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
-                train_d_real = disc_optimizer.minimize(
-                    disc_real_loss, var_list=discriminator_vars)
-                train_d_fake = disc_optimizer.minimize(
-                    disc_fake_loss, var_list=discriminator_vars)
+                train_discriminator = disc_optimizer.minimize(
+                    disc_total_loss, var_list=discriminator_vars)
                 self.sess.run(tf.variables_initializer(
                     disc_optimizer.variables()))
                 total_loss += disc_enc_scaled_loss
@@ -224,8 +228,8 @@ class PoseModel3d:
                 while True:
                     try:
                         if self.discriminator:
-                            _, summary_eval, _, _ = self.sess.run(
-                                (train, summary, train_d_real, train_d_fake),
+                            _, summary_eval, _ = self.sess.run(
+                                (train, summary, train_discriminator)
                                 feed_dict=feed)
                         else:
                             _, summary_eval = self.sess.run(

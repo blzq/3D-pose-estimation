@@ -74,7 +74,7 @@ def process_video(in_file, out_dir, estimator):
     out_mat_filename = \
         os.path.splitext(os.path.basename(in_file))[0] + '_maps'
     scipy.io.savemat(os.path.join(out_dir, out_mat_filename), out_dict,
-                        do_compression=True, appendmat=True)
+                     do_compression=True, appendmat=True)
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

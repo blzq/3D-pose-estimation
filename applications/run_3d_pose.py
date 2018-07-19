@@ -17,6 +17,7 @@ from tf_pose.networks import get_graph_path
 
 from pose_3d.pose_model_3d import PoseModel3d
 from pose_3d.data_helpers import *
+from pose_3d import config
 
 from tf_smpl.batch_smpl import SMPL
 
@@ -30,18 +31,18 @@ def main():
     in_im = cv2.resize(in_im, dsize=(320, 240),
                        interpolation=cv2.INTER_AREA)
 
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    tfconfig = tf.ConfigProto()
+    tfconfig.gpu_options.allow_growth = True
     with tf.Graph().as_default():
         estimator = OpPoseEstimator(get_graph_path('cmu'),
-                                    target_size=(320, 240), tf_config=config)
+                                    target_size=(320, 240), tf_config=tfconfig)
     humans = estimator.inference(in_im,
                                  resize_to_default=True, upsample_size=8.0)
     heatmaps = estimator.heatMat
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     inputs = np.concatenate([heatmaps, in_im[np.newaxis]], axis=3)
-    input_locs = heatmaps_to_locations(inputs).reshape([1, 18, 2])
+    input_locs = heatmaps_to_locations(inputs).reshape([1, config.n_joints, 2])
 
     # with different graph
     pm_graph = tf.Graph()
