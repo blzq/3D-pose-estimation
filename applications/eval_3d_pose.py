@@ -47,13 +47,15 @@ if __name__ == '__main__':
 
     pm_3d = PoseModel3d((None, 240, 320, 22),
                         graph,
-                        mode='train',
+                        mode='eval',
                         dataset=dataset,
                         summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
-                        restore_model=True,
-                        mesh_loss=True,
-                        smpl_model=smpl_neutral,
-                        discriminator=True)
+                        restore_model=True)
 
-    pm_3d.train(batch_size=32, epochs=500)
+    pose_loss, reproj_loss = pm_3d.evaluate()
+    print(np.mean(pose_loss))
+    print(np.std(pose_loss))
+    print(np.mean(reproj_loss))
+    print(np.std(reproj_loss))
+

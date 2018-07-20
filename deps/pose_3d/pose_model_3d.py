@@ -15,7 +15,7 @@ class PoseModel3d:
                  input_shape,
                  graph=None,
                  mode='test',
-                 in_dataset=None,
+                 dataset=None,
                  summary_dir='/tmp/tf_logs/3d_pose/',
                  saver_path='/tmp/tf_ckpts/3d_pose/ckpts/3d_pose.ckpt',
                  restore_model=True,
@@ -34,7 +34,7 @@ class PoseModel3d:
                 raise ValueError("mode must be 'train', 'test', or 'eval'")
             training = mode == 'train'
             if mode == 'train' or mode == 'eval':
-                self.dataset = in_dataset
+                self.dataset = dataset
                 self.input_handle = tf.placeholder(tf.string, shape=[])
                 iterator = tf.data.Iterator.from_string_handle(
                     self.input_handle,
@@ -77,6 +77,7 @@ class PoseModel3d:
             self.already_restored = False
 
     def save_model(self, save_model_path: str):
+        """ Save the model as a tf.SavedModel """
         with self.graph.as_default():
             tf.saved_model.simple_save(self.sess, save_model_path,
                                        {'in': self.in_placehold,
@@ -84,6 +85,7 @@ class PoseModel3d:
                                        {'out': self.outputs})
 
     def restore_from_checkpoint(self):
+        """ Restore weights from checkpoint - only runs once """
         with self.graph.as_default():
             # terminal colours for printing
             ok_col, warn_col, normal_col = '\033[92m', '\033[93m', '\033[0m'
@@ -110,6 +112,7 @@ class PoseModel3d:
                         warn_col, self.saver_path, normal_col))
 
     def estimate(self, input_inst, input_loc):
+        """ Run the model on an input instance """
         with self.graph.as_default():
             if self.saver is None:
                 self.saver = tf.train.Saver()
@@ -124,6 +127,7 @@ class PoseModel3d:
         return out
 
     def train(self, batch_size: int, epochs: int):
+        """ Train the model using the dataset passed in at model creation """
         with self.graph.as_default():
             self.dataset = self.dataset.shuffle(batch_size * 10)
             self.dataset = self.dataset.batch(batch_size)
@@ -164,11 +168,12 @@ class PoseModel3d:
 
             if self.reproject_loss:
                 out_cam_pos = self.outputs[:, 72:75]
-                out_cam_rot = self.outputs[:, 75:78]
-                out_cam_foc = self.outputs[:, 78]
+                out_cam_rot = self.outputs[:, 75:79]
+                out_cam_foc = self.outputs[:, 79]
                 # out_joints reshape from (batch, j, 3) to (batch * j, 3)
                 out_2d = project(tf.reshape(out_joints, [-1, 3]), 
                                  out_cam_pos, out_cam_rot, out_cam_foc)
+                # Flip x, y to y, x
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
                 # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.mean_squared_error(
@@ -243,3 +248,46 @@ class PoseModel3d:
                                         self.saver_path, global_step=i)
                     j += 1
                 self.saver.save(self.sess, self.saver_path, global_step=i)
+
+    def evaluate(self):
+        """ Evaluate the dataset passed in at the model creation time """
+        with self.graph.as_default():
+            iterator = self.dataset.make_initializable_iterator()
+            train_handle = self.sess.run(iterator.string_handle())
+
+            _, gt_joints2d, gt_pose, betas = self.next_input
+
+            out_pose = self.outputs[:, :72]
+            pose_loss = tf.losses.mean_squared_error(
+                labels=gt_pose, predictions=out_pose)
+
+            out_cam_pos = self.outputs[:, 72:75]
+            out_cam_rot = self.outputs[:, 75:79]
+            out_cam_foc = self.outputs[:, 79]
+            # out_joints reshape from (batch, j, 3) to (batch * j, 3)
+            out_2d = project(tf.reshape(out_joints, [-1, 3]), 
+                             out_cam_pos, out_cam_rot, out_cam_foc)
+            # Flip x, y to y, x
+            out_2d = tf.gather(out_2d, [1, 0], axis=1)
+            # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
+            reproj_loss = tf.losses.mean_squared_error(
+                out_2d, tf.reshape(gt_joints2d, [-1, 2]))
+
+            self.sess.run(iterator.initializer)
+            feed = {self.input_handle: train_handle}
+            all_pose_losses = []
+            all_reproj_losses = []
+            while True:
+                try:
+                    pose_loss_eval, reproj_loss_eval = self.sess.run(
+                        (pose_loss, reproj_loss),
+                        feed_dict=feed)
+                    all_pose_losses.append(pose_loss_eval)
+                    all_reproj_losses.append(reproj_loss_eval)
+                except tf.errors.OutOfRangeError:
+                    break
+            all_pose_losses = np.array(all_pose_losses)
+            all_reproj_losses = np.array(all_reproj_losses)
+            return all_pose_losses, all_reproj_losses
+            
+
