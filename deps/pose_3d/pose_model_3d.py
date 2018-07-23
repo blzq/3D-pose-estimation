@@ -179,7 +179,7 @@ class PoseModel3d:
                 out_2d = project(tf.reshape(out_joints, [-1, 3]), 
                                  tf.reshape(out_cam_pos, [-1, 3]), 
                                  tf.reshape(out_cam_rot, [-1, 3]), 
-                                 tf.reshape(out_cam_foc, [-1])
+                                 tf.reshape(out_cam_foc, [-1]))
                 # Flip x, y to y, x
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
                 # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
