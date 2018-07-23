@@ -21,7 +21,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
             tuple(tf.py_func(
                 read_maps_poses_images, [mf, pf, fp],
                 [tf.float32, tf.float32, tf.float32, tf.float32]))),
-                cycle_length=20, block_length=10)
+                cycle_length=10, block_length=10)
 
     return dataset
 

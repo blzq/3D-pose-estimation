@@ -53,7 +53,8 @@ class PoseModel3d:
                     self.smpl = SMPL(smpl_model)
                 if self.discriminator:
                     if training:
-                        d_in = tf.concat([self.next_input[2], self.outputs], 0)
+                        d_in = tf.concat(
+                            [self.next_input[2], self.outputs[:, :72]], 0)
                     else:
                         d_in = self.outputs
                     self.discriminator_outputs = build_discriminator(d_in)
@@ -156,6 +157,7 @@ class PoseModel3d:
             if self.mesh_loss or self.reproject_loss:
                 out_meshes, out_joints, _ = self.smpl(betas, out_pose, 
                                                       get_skin=True)
+                out_joints = out_joints[:, :config.n_joints]
                 gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
 
             if self.mesh_loss:
@@ -167,12 +169,17 @@ class PoseModel3d:
                 total_loss += scaled_mesh_loss
 
             if self.reproject_loss:
-                out_cam_pos = self.outputs[:, 72:75]
-                out_cam_rot = self.outputs[:, 75:79]
-                out_cam_foc = self.outputs[:, 79]
-                # out_joints reshape from (batch, j, 3) to (batch * j, 3)
+                out_cam_pos = tf.tile(self.outputs[:, 72:75], 
+                                      [1, config.n_joints])
+                out_cam_rot = tf.tile(self.outputs[:, 75:78], 
+                                      [1, config.n_joints])
+                out_cam_foc = tf.tile(self.outputs[:, 78],
+                                      [1, config.n_joints])
+                # reshape from (batch, j, 3) to (batch * j, 3)
                 out_2d = project(tf.reshape(out_joints, [-1, 3]), 
-                                 out_cam_pos, out_cam_rot, out_cam_foc)
+                                 tf.reshape(out_cam_pos, [-1, 3]), 
+                                 tf.reshape(out_cam_rot, [-1, 3]), 
+                                 tf.reshape(out_cam_foc, [-1])
                 # Flip x, y to y, x
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
                 # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
@@ -234,7 +241,7 @@ class PoseModel3d:
                     try:
                         if self.discriminator:
                             _, summary_eval, _ = self.sess.run(
-                                (train, summary, train_discriminator)
+                                (train, summary, train_discriminator),
                                 feed_dict=feed)
                         else:
                             _, summary_eval = self.sess.run(
@@ -261,12 +268,16 @@ class PoseModel3d:
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_pose, predictions=out_pose)
 
-            out_cam_pos = self.outputs[:, 72:75]
-            out_cam_rot = self.outputs[:, 75:79]
-            out_cam_foc = self.outputs[:, 79]
-            # out_joints reshape from (batch, j, 3) to (batch * j, 3)
+            out_joints = self.smpl(betas, out_pose, get_skin=False)
+            n_joints = tf.shape(out_joints)[1]
+            out_cam_pos = tf.tile(self.outputs[:, 72:75], [1, n_joints])
+            out_cam_rot = tf.tile(self.outputs[:, 75:78], [1, n_joints])
+            out_cam_foc = tf.tile(self.outputs[:, 78], [n_joints])
+            # reshape from (batch, j, 3) to (batch * j, 3)
             out_2d = project(tf.reshape(out_joints, [-1, 3]), 
-                             out_cam_pos, out_cam_rot, out_cam_foc)
+                             tf.reshape(out_cam_pos, [-1, 3]), 
+                             tf.reshape(out_cam_rot, [-1, 3]), 
+                             out_cam_foc)
             # Flip x, y to y, x
             out_2d = tf.gather(out_2d, [1, 0], axis=1)
             # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)

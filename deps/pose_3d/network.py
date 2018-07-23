@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import tensorflow as tf
-from tf_rodrigues.rodrigues import rodrigues_batch
+from tf_perspective_projection.project import rodrigues_batch
 from tf_pose.common import CocoPart
 
 
@@ -11,7 +11,8 @@ def build_model(inputs, inputs_locs, training: bool):
         with tf.variable_scope('init_conv'):
             tf.summary.histogram('input_heatmaps', inputs[:, :, :, :19])
             tf.summary.histogram('input_frames', inputs[:, :, :, 19:])
-            in_1x1 = tf.layers.conv2d(inputs, tf.shape(inputs)[-1], [1, 1])
+            in_channels = inputs.get_shape().as_list()[-1]
+            in_1x1 = tf.layers.conv2d(inputs, in_channels, [1, 1])
             in_bn = tf.layers.batch_normalization(in_1x1, training=training)
             in_relu = tf.nn.relu(in_bn)
 
@@ -136,17 +137,17 @@ def _mobilenetv2(inputs, training: bool, alpha=1.4):
 
 def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int, 
                        alpha: float, training: bool):
-    in_channels = tf.shape(inputs)[-1]
+    in_channels = inputs.get_shape().as_list()[-1]
     pointwise_conv_filters = _make_divisible(int(filters * alpha), 8)
 
     if expansion > 1:
         expand = tf.layers.conv2d(inputs, expansion * in_channels, [1, 1])
-        ex_bn = tf.layers.BatchNormalization(expand, training=training)
+        ex_bn = tf.layers.batch_normalization(expand, training=training)
         ex_out = tf.nn.relu6(ex_bn)
     else:
         ex_out = inputs
     
-    d_channels = tf.shape(ex_out)[-1]
+    d_channels = ex_out.get_shape().as_list()[-1]
     # This layer contains an extra pointwise 1x1 conv compared to MobileNetv2
     # Switch to Keras DepthwiseConv2d?
     depthwise = tf.layers.separable_conv2d(ex_out, d_channels, [3, 3], stride, 
