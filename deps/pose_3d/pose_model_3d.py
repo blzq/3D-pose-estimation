@@ -173,7 +173,7 @@ class PoseModel3d:
                                       [1, config.n_joints])
                 out_cam_rot = tf.tile(self.outputs[:, 75:78], 
                                       [1, config.n_joints])
-                out_cam_foc = tf.tile(self.outputs[:, 78],
+                out_cam_foc = tf.tile(self.outputs[:, 78, tf.newaxis],
                                       [1, config.n_joints])
                 # reshape from (batch, j, 3) to (batch * j, 3)
                 out_2d = project(tf.reshape(out_joints, [-1, 3]), 
