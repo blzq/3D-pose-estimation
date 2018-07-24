@@ -143,6 +143,11 @@ class PoseModel3d:
                 out_mat = rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
                 gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))
 
+            pose_loss_dir = tf.losses.mean_squared_error(
+                labels=gt_pose, predictions=out_pose)
+            scaled_pose_loss_dir = pose_loss_dir * config.pose_loss_dir_scale
+            tf.summary.scalar('pose_loss_dir', scaled_pose_loss_dir, 
+                              family='losses')
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
             tf.summary.scalar('pose_loss', pose_loss, family='losses')
@@ -151,7 +156,7 @@ class PoseModel3d:
                 labels=tf.zeros(tf.shape(gt_pose)), predictions=out_pose)
             scaled_reg_loss = reg_loss * config.reg_loss_scale
             tf.summary.scalar('reg_loss', scaled_reg_loss, family='losses')
-            total_loss = pose_loss + scaled_reg_loss
+            total_loss = pose_loss + scaled_reg_loss + scaled_pose_loss_dir
 
             if self.mesh_loss or self.reproject_loss:
                 out_meshes, out_joints, _ = self.smpl(betas, out_pose,
@@ -182,11 +187,11 @@ class PoseModel3d:
                                      tf.reshape(out_cam_foc, [-1]))
                 # Flip x, y to y, x
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
-                out_2d = out_2d * self.img_side_len * 0.5
+                out_2d = (out_2d + 1) * self.img_side_len * 0.5
                 # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.huber_loss(
                     labels=tf.reshape(gt_joints2d, [-1, 2]), predictions=out_2d,
-                    delta=50.0)
+                    delta=10.0)
                 scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
                 tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
                                   family='losses')
@@ -213,7 +218,7 @@ class PoseModel3d:
                 disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
                 tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
                                   family='losses')
-                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.00002)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -225,7 +230,7 @@ class PoseModel3d:
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.00001)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             train = optimizer.minimize(total_loss, var_list=encoder_vars)

@@ -15,7 +15,7 @@ DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
-START_NAME = 'ung_41_08'  # Modify with name to start at
+START_NAME = 'ung_86_02'  # Modify with name to start at
 
 
 def read_maps(maps_file):
