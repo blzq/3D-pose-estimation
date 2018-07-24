@@ -28,7 +28,7 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames:
+    for basename in basenames[:basenames.index('ung_41_08')]:
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = glob.glob(
             os.path.join(one_data_dir, basename + '_c*_maps.mat'))

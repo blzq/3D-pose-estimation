@@ -58,4 +58,3 @@ if __name__ == '__main__':
     print(np.std(pose_loss))
     print(np.mean(reproj_loss))
     print(np.std(reproj_loss))
-

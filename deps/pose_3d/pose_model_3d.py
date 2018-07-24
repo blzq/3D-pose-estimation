@@ -1,6 +1,3 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
 import os.path
 
 import tensorflow as tf
@@ -28,7 +25,9 @@ class PoseModel3d:
             tfconfig = tf.ConfigProto()
             tfconfig.gpu_options.allow_growth = True  # noqa
             self.sess = tf.Session(config=tfconfig)
-
+            
+            shorter_side = min(input_shape[1], input_shape[2])
+            self.img_side_len = shorter_side
             self.discriminator = discriminator
             if mode not in ['train', 'test', 'eval']:
                 raise ValueError("mode must be 'train', 'test', or 'eval'")
@@ -132,7 +131,7 @@ class PoseModel3d:
         with self.graph.as_default():
             self.dataset = self.dataset.shuffle(batch_size * 10)
             self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(10)
+            self.dataset = self.dataset.prefetch(2)
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
@@ -155,12 +154,12 @@ class PoseModel3d:
             total_loss = pose_loss + scaled_reg_loss
 
             if self.mesh_loss or self.reproject_loss:
-                out_meshes, out_joints, _ = self.smpl(betas, out_pose, 
+                out_meshes, out_joints, _ = self.smpl(betas, out_pose,
                                                       get_skin=True)
                 out_joints = out_joints[:, :config.n_joints]
-                gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
 
             if self.mesh_loss:
+                gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_meshes, predictions=out_meshes)
                 scaled_mesh_loss = mesh_loss * config.mesh_loss_scale
@@ -169,22 +168,25 @@ class PoseModel3d:
                 total_loss += scaled_mesh_loss
 
             if self.reproject_loss:
-                out_cam_pos = tf.tile(self.outputs[:, 72:75], 
+                out_cam_pos = tf.tile(self.outputs[:, 72:75],
                                       [1, config.n_joints])
-                out_cam_rot = tf.tile(self.outputs[:, 75:78], 
+                out_cam_rot = tf.tile(self.outputs[:, 75:78],
                                       [1, config.n_joints])
                 out_cam_foc = tf.tile(self.outputs[:, 78, tf.newaxis],
                                       [1, config.n_joints])
-                # reshape from (batch, j, 3) to (batch * j, 3)
-                out_2d = project(tf.reshape(out_joints, [-1, 3]), 
-                                 tf.reshape(out_cam_pos, [-1, 3]), 
-                                 tf.reshape(out_cam_rot, [-1, 3]), 
-                                 tf.reshape(out_cam_foc, [-1]))
+                with tf.variable_scope("projection"):
+                    # reshape from (batch, j, 3) to (batch * j, 3)
+                    out_2d = project(tf.reshape(out_joints, [-1, 3]),
+                                     tf.reshape(out_cam_pos, [-1, 3]),
+                                     tf.reshape(out_cam_rot, [-1, 3]),
+                                     tf.reshape(out_cam_foc, [-1]))
                 # Flip x, y to y, x
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
+                out_2d = out_2d * self.img_side_len * 0.5
                 # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
-                reproj_loss = tf.losses.mean_squared_error(
-                    out_2d, tf.reshape(gt_joints2d, [-1, 2]))
+                reproj_loss = tf.losses.huber_loss(
+                    labels=tf.reshape(gt_joints2d, [-1, 2]), predictions=out_2d,
+                    delta=50.0)
                 scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
                 tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
                                   family='losses')
@@ -195,20 +197,23 @@ class PoseModel3d:
                     tf.split(self.discriminator_outputs, 2, axis=0)
 
                 disc_real_loss = tf.losses.mean_squared_error(
-                    disc_real_out, tf.ones(tf.shape(gt_pose)))
+                    labels=tf.ones(tf.shape(gt_pose)), 
+                    predictions=disc_real_out)
                 tf.summary.scalar('discriminator_real_loss', disc_real_loss,
                                   family='discriminator')
                 disc_fake_loss = tf.losses.mean_squared_error(
-                    disc_pred_out, tf.zeros(tf.shape(out_pose)))
+                    labels=tf.zeros(tf.shape(out_pose)), 
+                    predictions=disc_pred_out)
                 tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
                                   family='discriminator')
                 disc_total_loss = disc_real_loss + disc_fake_loss
                 disc_enc_loss = tf.losses.mean_squared_error(
-                    disc_pred_out, tf.ones(tf.shape(out_pose)))
+                    labels=tf.ones(tf.shape(out_pose)), 
+                    predictions=disc_pred_out)
                 disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
                 tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
                                   family='losses')
-                disc_optimizer = tf.train.AdamOptimizer()
+                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -220,7 +225,7 @@ class PoseModel3d:
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer()
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.00005)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             train = optimizer.minimize(total_loss, var_list=encoder_vars)
@@ -269,20 +274,24 @@ class PoseModel3d:
                 labels=gt_pose, predictions=out_pose)
 
             out_joints = self.smpl(betas, out_pose, get_skin=False)
-            n_joints = tf.shape(out_joints)[1]
-            out_cam_pos = tf.tile(self.outputs[:, 72:75], [1, n_joints])
-            out_cam_rot = tf.tile(self.outputs[:, 75:78], [1, n_joints])
-            out_cam_foc = tf.tile(self.outputs[:, 78], [n_joints])
-            # reshape from (batch, j, 3) to (batch * j, 3)
-            out_2d = project(tf.reshape(out_joints, [-1, 3]), 
-                             tf.reshape(out_cam_pos, [-1, 3]), 
-                             tf.reshape(out_cam_rot, [-1, 3]), 
-                             out_cam_foc)
+            out_joints = out_joints[:, :config.n_joints]
+            out_cam_pos = tf.tile(self.outputs[:, 72:75],
+                                    [1, config.n_joints])
+            out_cam_rot = tf.tile(self.outputs[:, 75:78],
+                                    [1, config.n_joints])
+            out_cam_foc = tf.tile(self.outputs[:, 78, tf.newaxis],
+                                    [1, config.n_joints])
+            with tf.variable_scope("projection"):
+                # reshape from (batch, j, 3) to (batch * j, 3)
+                out_2d = project(tf.reshape(out_joints, [-1, 3]),
+                                 tf.reshape(out_cam_pos, [-1, 3]),
+                                 tf.reshape(out_cam_rot, [-1, 3]),
+                                 tf.reshape(out_cam_foc, [-1]))
             # Flip x, y to y, x
             out_2d = tf.gather(out_2d, [1, 0], axis=1)
             # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
             reproj_loss = tf.losses.mean_squared_error(
-                out_2d, tf.reshape(gt_joints2d, [-1, 2]))
+                labels=tf.reshape(gt_joints2d, [-1, 2]), predictions=out_2d)
 
             self.sess.run(iterator.initializer)
             feed = {self.input_handle: train_handle}
@@ -300,5 +309,3 @@ class PoseModel3d:
             all_pose_losses = np.array(all_pose_losses)
             all_reproj_losses = np.array(all_reproj_losses)
             return all_pose_losses, all_reproj_losses
-            
-

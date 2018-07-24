@@ -1,6 +1,3 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
 import os
 import glob
 import scipy.io
@@ -16,7 +13,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
     dataset = tf.data.Dataset.from_tensor_slices(
             (maps_files, info_files, frames_paths))
 
-    dataset = dataset.interleave(lambda mf, pf, fp: 
+    dataset = dataset.interleave(lambda mf, pf, fp:
         tf.data.Dataset.from_tensor_slices(
             tuple(tf.py_func(
                 read_maps_poses_images, [mf, pf, fp],

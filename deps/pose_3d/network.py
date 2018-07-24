@@ -52,7 +52,7 @@ def build_model(inputs, inputs_locs, training: bool):
             bl3 = _bilinear_residual_block(bl2, training)
 
         with tf.variable_scope('out_fc'):
-            out = tf.layers.dense(bl3, 79) # 24 rotations + 7 camera params
+            out = tf.layers.dense(bl3, 79) # 24*3 rotations + 7 camera params
 
         tf.summary.histogram('out', out)
 
@@ -79,12 +79,12 @@ def _xception_entry(inputs, filters: int, training: bool, init_relu=True):
         main_in = tf.nn.relu(inputs)
     else:
         main_in = inputs
-    s_conv1 = tf.layers.separable_conv2d(main_in, filters, [3, 3], 
+    s_conv1 = tf.layers.separable_conv2d(main_in, filters, [3, 3],
                                          padding='same')
     bn1 = tf.layers.batch_normalization(s_conv1, training=training)
     relu1 = tf.nn.relu(bn1)
 
-    s_conv2 = tf.layers.separable_conv2d(relu1, filters, [3, 3], 
+    s_conv2 = tf.layers.separable_conv2d(relu1, filters, [3, 3],
                                          padding='same')
     bn2 = tf.layers.batch_normalization(s_conv2, training=training)
     maxpool2 = tf.layers.max_pooling2d(bn2, [3, 3], 2, padding='same')
@@ -130,12 +130,12 @@ def _mobilenetv2(inputs, training: bool, alpha=1.4):
     last_conv = tf.layers.conv2d(mn17, last_filters, [1, 1])
     last_bn = tf.layers.batch_normalization(last_conv, training=training)
     last_relu = tf.nn.relu6(last_bn)
-    
+
     pool = tf.reduce_mean(last_relu, axis=[1, 2])
     return pool
 
 
-def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int, 
+def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int,
                        alpha: float, training: bool):
     in_channels = inputs.get_shape().as_list()[-1]
     pointwise_conv_filters = _make_divisible(int(filters * alpha), 8)
@@ -146,11 +146,11 @@ def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int,
         ex_out = tf.nn.relu6(ex_bn)
     else:
         ex_out = inputs
-    
+
     d_channels = ex_out.get_shape().as_list()[-1]
     # This layer contains an extra pointwise 1x1 conv compared to MobileNetv2
     # Switch to Keras DepthwiseConv2d?
-    depthwise = tf.layers.separable_conv2d(ex_out, d_channels, [3, 3], stride, 
+    depthwise = tf.layers.separable_conv2d(ex_out, d_channels, [3, 3], stride,
                                            padding='same')
     dw_bn = tf.layers.batch_normalization(depthwise, training=training)
     dw_relu = tf.nn.relu6(dw_bn)
@@ -182,20 +182,19 @@ def build_discriminator(inputs):
         inputs_rot_mat = tf.reshape(inputs_rot_mat, [batch_size, 24, 3, 3])
         # Transpose from (batch * 24, 3, 3) to (batch, 3, 3, 24)
         inputs_rot_mat = tf.transpose(inputs_rot_mat, [0, 2, 3, 1])
-        init_conv = tf.layers.conv2d(inputs_rot_mat, 1024, [3, 3])
-        init_relu = tf.nn.leaky_relu(init_conv)
+        init_conv1 = tf.layers.conv2d(inputs_rot_mat, 1024, [3, 3])
+        init_relu1 = tf.nn.leaky_relu(init_conv1)
 
-        flatten = tf.layers.flatten(init_relu)
+        flatten = tf.layers.flatten(init_relu1)
 
-        linear1 = tf.layers.dense(flatten, 1024)
+        linear1 = tf.layers.dense(flatten, 512)
         relu1 = tf.nn.leaky_relu(linear1)
 
-        linear2 = tf.layers.dense(relu1, 1024)
+        linear2 = tf.layers.dense(relu1, 256)
         relu2 = tf.nn.leaky_relu(linear2)
 
-        linear3 = tf.layers.dense(relu2, 1024)
+        linear3 = tf.layers.dense(relu2, 128)
         relu3 = tf.nn.leaky_relu(linear3)
 
         out = tf.layers.dense(relu3, 72)
-
         return out
