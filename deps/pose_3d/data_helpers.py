@@ -13,12 +13,12 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
     dataset = tf.data.Dataset.from_tensor_slices(
             (maps_files, info_files, frames_paths))
 
-    dataset = dataset.interleave(lambda mf, pf, fp:
-        tf.data.Dataset.from_tensor_slices(
-            tuple(tf.py_func(
-                read_maps_poses_images, [mf, pf, fp],
-                [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]))),
-                cycle_length=10, block_length=10)
+    dataset = dataset.apply(tf.contrib.data.parallel_interleave(
+        lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(
+            tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
+                             [tf.float32, tf.float32, tf.float32, 
+                              tf.float32, tf.float32]))),
+        cycle_length=4, block_length=1, sloppy=True))
 
     return dataset
 

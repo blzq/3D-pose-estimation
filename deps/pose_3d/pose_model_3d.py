@@ -131,9 +131,9 @@ class PoseModel3d:
     def train(self, batch_size: int, epochs: int):
         """ Train the model using the dataset passed in at model creation """
         with self.graph.as_default():
-            self.dataset = self.dataset.shuffle(batch_size * 10)
+            self.dataset = self.dataset.shuffle(batch_size * 16)
             self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(2)
+            self.dataset = self.dataset.prefetch(batch_size * 2)
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
@@ -194,7 +194,7 @@ class PoseModel3d:
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.huber_loss(
                     labels=tf.reshape(smpl_joints2d, [-1, 2]), predictions=out_2d,
-                    delta=10.0)
+                    delta=16.0)
                 scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
                 tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
                                   family='losses')
@@ -221,7 +221,7 @@ class PoseModel3d:
                 disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
                 tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
                                   family='losses')
-                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.00002)
+                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.00004)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -233,7 +233,7 @@ class PoseModel3d:
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.00001)
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.00002)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             train = optimizer.minimize(total_loss, var_list=encoder_vars)
@@ -263,6 +263,7 @@ class PoseModel3d:
                         self.summary_writer.add_summary(summary_eval, i)
                     except tf.errors.OutOfRangeError:
                         break
+                    print(j, end=' ', flush=True)
                     if j % 1000 == 0:
                         self.saver.save(self.sess,
                                         self.saver_path, global_step=i)
