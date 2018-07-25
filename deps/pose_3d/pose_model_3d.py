@@ -1,6 +1,8 @@
 import os.path
 
 import tensorflow as tf
+import numpy as np
+
 from .network import build_model, build_discriminator
 from . import config
 from tf_smpl.batch_smpl import SMPL
@@ -43,7 +45,7 @@ class PoseModel3d:
                 self.in_placehold = tf.placeholder_with_default(
                     self.next_input[0], input_shape)
                 self.in_placehold_loc = tf.placeholder_with_default(
-                    self.next_input[1], [None, config.n_joints, 2])
+                    self.next_input[1], [None, config.n_joints, 3])
                 self.outputs = build_model(
                     self.in_placehold, self.in_placehold_loc, training)
                 self.mesh_loss = mesh_loss
@@ -135,7 +137,7 @@ class PoseModel3d:
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
-            _, gt_joints2d, gt_pose, betas = self.next_input
+            _, _, gt_pose, betas, smpl_joints2d = self.next_input
 
             out_pose = self.outputs[:, :72]
 
@@ -159,9 +161,9 @@ class PoseModel3d:
             total_loss = pose_loss + scaled_reg_loss + scaled_pose_loss_dir
 
             if self.mesh_loss or self.reproject_loss:
-                out_meshes, out_joints, _ = self.smpl(betas, out_pose,
-                                                      get_skin=True)
-                out_joints = out_joints[:, :config.n_joints]
+                out_meshes, _, _ = self.smpl(betas, out_pose,
+                                             get_skin=True)
+                out_joints = self.smpl.J_transformed
 
             if self.mesh_loss:
                 gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
@@ -174,11 +176,11 @@ class PoseModel3d:
 
             if self.reproject_loss:
                 out_cam_pos = tf.tile(self.outputs[:, 72:75],
-                                      [1, config.n_joints])
+                                      [1, config.n_joints_smpl])
                 out_cam_rot = tf.tile(self.outputs[:, 75:78],
-                                      [1, config.n_joints])
+                                      [1, config.n_joints_smpl])
                 out_cam_foc = tf.tile(self.outputs[:, 78, tf.newaxis],
-                                      [1, config.n_joints])
+                                      [1, config.n_joints_smpl])
                 with tf.variable_scope("projection"):
                     # reshape from (batch, j, 3) to (batch * j, 3)
                     out_2d = project(tf.reshape(out_joints, [-1, 3]),
@@ -187,10 +189,11 @@ class PoseModel3d:
                                      tf.reshape(out_cam_foc, [-1]))
                 # Flip x, y to y, x
                 out_2d = tf.gather(out_2d, [1, 0], axis=1)
+                # Rescale to image size
                 out_2d = (out_2d + 1) * self.img_side_len * 0.5
-                # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
+                # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.huber_loss(
-                    labels=tf.reshape(gt_joints2d, [-1, 2]), predictions=out_2d,
+                    labels=tf.reshape(smpl_joints2d, [-1, 2]), predictions=out_2d,
                     delta=10.0)
                 scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
                 tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
@@ -272,20 +275,20 @@ class PoseModel3d:
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
-            _, gt_joints2d, gt_pose, betas = self.next_input
+            _, _, gt_pose, betas, smpl_joints2d = self.next_input
 
             out_pose = self.outputs[:, :72]
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_pose, predictions=out_pose)
 
-            out_joints = self.smpl(betas, out_pose, get_skin=False)
-            out_joints = out_joints[:, :config.n_joints]
+            _ = self.smpl(betas, out_pose, get_skin=False)
+            out_joints = self.smpl.J_transformed
             out_cam_pos = tf.tile(self.outputs[:, 72:75],
-                                    [1, config.n_joints])
+                                    [1, config.n_joints_smpl])
             out_cam_rot = tf.tile(self.outputs[:, 75:78],
-                                    [1, config.n_joints])
+                                    [1, config.n_joints_smpl])
             out_cam_foc = tf.tile(self.outputs[:, 78, tf.newaxis],
-                                    [1, config.n_joints])
+                                    [1, config.n_joints_smpl])
             with tf.variable_scope("projection"):
                 # reshape from (batch, j, 3) to (batch * j, 3)
                 out_2d = project(tf.reshape(out_joints, [-1, 3]),
@@ -294,9 +297,11 @@ class PoseModel3d:
                                  tf.reshape(out_cam_foc, [-1]))
             # Flip x, y to y, x
             out_2d = tf.gather(out_2d, [1, 0], axis=1)
-            # gt_joints2d reshape from (batch, j, 2) to (batch * j, 2)
+            # Rescale to image size
+            out_2d = (out_2d + 1) * self.img_side_len * 0.5
+            # joints2d reshape from (batch, j, 2) to (batch * j, 2)
             reproj_loss = tf.losses.mean_squared_error(
-                labels=tf.reshape(gt_joints2d, [-1, 2]), predictions=out_2d)
+                labels=tf.reshape(smpl_joints2d, [-1, 2]), predictions=out_2d)
 
             self.sess.run(iterator.initializer)
             feed = {self.input_handle: train_handle}

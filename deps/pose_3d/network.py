@@ -23,18 +23,8 @@ def build_model(inputs, inputs_locs, training: bool):
             bn2 = tf.layers.batch_normalization(init_conv2, training=training)
             conv_relu2 = tf.nn.relu(bn2)
 
-        # with tf.variable_scope('xception_entry'):
-        #     xc1 = _xception_entry(conv_relu2, 128, training, init_relu=False)
-        #     xc2 = _xception_entry(xc1, 256, training)
-        #     xc3 = _xception_entry(xc2, 728, training)
-
-        # with tf.variable_scope('xception_out'):
-        #     xc_out = tf.layers.separable_conv2d(xc3, 1024, [3, 3])
-        #     xc_relu = tf.nn.relu(xc_out)
-        #     xc_pool = tf.reduce_mean(xc_relu, axis=[1, 2])
-
         with tf.variable_scope('mobilenetv2'):
-            mn = _mobilenetv2(conv_relu2, training, alpha=1.4)
+            mn = _mobilenetv2(conv_relu2, training, alpha=1.0)
 
         with tf.variable_scope('init_dense'):
             features_flat = tf.layers.flatten(mn)
@@ -54,7 +44,8 @@ def build_model(inputs, inputs_locs, training: bool):
         with tf.variable_scope('out_fc'):
             out = tf.layers.dense(bl3, 79) # 24*3 rotations + 7 camera params
 
-        tf.summary.histogram('out', out)
+        tf.summary.histogram('out_pose', out[:, :72])
+        tf.summary.histogram('out_cam', out[:, 72:])
 
     return out
 
@@ -71,28 +62,6 @@ def _bilinear_residual_block(inputs, training: bool):
     dropout2 = tf.layers.dropout(relu2, 0.3, training=training)
 
     add = tf.add(inputs, dropout2)
-    return add
-
-
-def _xception_entry(inputs, filters: int, training: bool, init_relu=True):
-    if init_relu:
-        main_in = tf.nn.relu(inputs)
-    else:
-        main_in = inputs
-    s_conv1 = tf.layers.separable_conv2d(main_in, filters, [3, 3],
-                                         padding='same')
-    bn1 = tf.layers.batch_normalization(s_conv1, training=training)
-    relu1 = tf.nn.relu(bn1)
-
-    s_conv2 = tf.layers.separable_conv2d(relu1, filters, [3, 3],
-                                         padding='same')
-    bn2 = tf.layers.batch_normalization(s_conv2, training=training)
-    maxpool2 = tf.layers.max_pooling2d(bn2, [3, 3], 2, padding='same')
-
-    s_conv_skip = tf.layers.conv2d(inputs, filters, [1, 1], 2)
-    bn_skip = tf.layers.batch_normalization(s_conv_skip, training=training)
-
-    add = tf.add(bn_skip, maxpool2)
     return add
 
 
