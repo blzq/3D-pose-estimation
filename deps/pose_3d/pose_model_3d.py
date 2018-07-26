@@ -25,7 +25,7 @@ class PoseModel3d:
         self.graph = graph if graph != None else tf.get_default_graph()
         with self.graph.as_default():
             tfconfig = tf.ConfigProto()
-            tfconfig.gpu_options.allow_growth = True  # noqa
+            tfconfig.gpu_options.allow_growth = True  # pylint: disable=no-member
             self.sess = tf.Session(config=tfconfig)
 
             shorter_side = min(input_shape[1], input_shape[2])
@@ -148,19 +148,18 @@ class PoseModel3d:
                 gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))
 
             pose_loss_dir = tf.losses.mean_squared_error(
-                labels=gt_pose, predictions=out_pose)
-            scaled_pose_loss_dir = pose_loss_dir * config.pose_loss_dir_scale
-            tf.summary.scalar('pose_loss_dir', scaled_pose_loss_dir,
-                              family='losses')
+                labels=gt_pose, predictions=out_pose,
+                weights=config.pose_loss_dir_scale)
+            tf.summary.scalar('pose_loss_dir', pose_loss_dir, family='losses')
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
             tf.summary.scalar('pose_loss', pose_loss, family='losses')
 
             reg_loss = tf.losses.mean_squared_error(
-                labels=tf.zeros(tf.shape(gt_pose)), predictions=out_pose)
-            scaled_reg_loss = reg_loss * config.reg_loss_scale
-            tf.summary.scalar('reg_loss', scaled_reg_loss, family='losses')
-            total_loss = pose_loss + scaled_reg_loss + scaled_pose_loss_dir
+                labels=tf.zeros(tf.shape(gt_pose)), predictions=out_pose,
+                weights=config.reg_loss_scale)
+            tf.summary.scalar('reg_loss', reg_loss, family='losses')
+            total_loss = pose_loss + reg_loss + pose_loss_dir
 
             if self.mesh_loss or self.reproject_loss:
                 out_meshes, _, _ = self.smpl(betas, out_pose,
@@ -170,11 +169,10 @@ class PoseModel3d:
             if self.mesh_loss:
                 gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
                 mesh_loss = tf.losses.mean_squared_error(
-                    labels=gt_meshes, predictions=out_meshes)
-                scaled_mesh_loss = mesh_loss * config.mesh_loss_scale
-                tf.summary.scalar('mesh_loss', scaled_mesh_loss,
-                                  family='losses')
-                total_loss += scaled_mesh_loss
+                    labels=gt_meshes, predictions=out_meshes,
+                    weights=config.mesh_loss_scale)
+                tf.summary.scalar('mesh_loss', mesh_loss, family='losses')
+                total_loss += mesh_loss
 
             if self.reproject_loss:
                 out_cam_pos = tf.tile(self.outputs[:, 72:75],
@@ -195,12 +193,11 @@ class PoseModel3d:
                 out_2d = (out_2d + 1) * self.img_side_len * 0.5
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.huber_loss(
-                    labels=tf.reshape(smpl_joints2d, [-1, 2]), predictions=out_2d,
-                    delta=16.0)
-                scaled_reproj_loss = reproj_loss * config.reproj_loss_scale
-                tf.summary.scalar('reprojection_loss', scaled_reproj_loss,
-                                  family='losses')
-                total_loss += scaled_reproj_loss
+                    labels=tf.reshape(smpl_joints2d, [-1, 2]), 
+                    predictions=out_2d,
+                    delta=16.0, weights=config.reproj_loss_scale)
+                tf.summary.scalar('reproj_loss', reproj_loss, family='losses')
+                total_loss += reproj_loss
 
             if self.discriminator:
                 disc_real_out, disc_pred_out = \
@@ -217,12 +214,6 @@ class PoseModel3d:
                 tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
                                   family='discriminator')
                 disc_total_loss = disc_real_loss + disc_fake_loss
-                disc_enc_loss = tf.losses.mean_squared_error(
-                    labels=tf.ones(tf.shape(out_pose)),
-                    predictions=disc_pred_out)
-                disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
-                tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
-                                  family='losses')
                 disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.00004)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
@@ -230,7 +221,13 @@ class PoseModel3d:
                     disc_total_loss, var_list=discriminator_vars)
                 self.sess.run(tf.variables_initializer(
                     disc_optimizer.variables()))
-                total_loss += disc_enc_scaled_loss
+
+                disc_enc_loss = tf.losses.mean_squared_error(
+                    labels=tf.ones(tf.shape(out_pose)),
+                    predictions=disc_pred_out, weights=config.disc_loss_scale)
+                tf.summary.scalar('discriminator_loss', disc_enc_loss, 
+                                  family='losses')
+                total_loss += disc_enc_loss
 
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
@@ -259,20 +256,20 @@ class PoseModel3d:
                         gs = tf.train.global_step(self.sess, self.step)
                         if self.discriminator:
                             _, summary_eval, _ = self.sess.run(
-                                (train, summary, train_discriminator),
+                                (train, summary, train_discriminator), 
                                 feed_dict=feed)
                         else:
                             _, summary_eval = self.sess.run(
-                                (train, summary),
-                                feed_dict=feed)
+                                (train, summary), feed_dict=feed)
                         self.summary_writer.add_summary(summary_eval, gs)
                     except tf.errors.OutOfRangeError:
                         break
                     print(gs, end=' ', flush=True)
                     if gs % 2000 == 0:
-                        self.saver.save(self.sess,
-                                        self.saver_path, global_step=self.step)
-                self.saver.save(self.sess, self.saver_path, global_step=self.step)
+                        self.saver.save(self.sess, self.saver_path, 
+                                        global_step=self.step)
+                self.saver.save(self.sess, self.saver_path, 
+                                global_step=self.step)
 
     def evaluate(self):
         """ Evaluate the dataset passed in at the model creation time """

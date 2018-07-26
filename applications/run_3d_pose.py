@@ -32,7 +32,7 @@ def main():
                        interpolation=cv2.INTER_AREA)
 
     tfconfig = tf.ConfigProto()
-    tfconfig.gpu_options.allow_growth = True  # noqa
+    tfconfig.gpu_options.allow_growth = True  # pylint: disable=no-member
     with tf.Graph().as_default():
         estimator = OpPoseEstimator(get_graph_path('cmu'),
                                     target_size=(320, 240), tf_config=tfconfig)
