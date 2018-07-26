@@ -27,7 +27,7 @@ class PoseModel3d:
             tfconfig = tf.ConfigProto()
             tfconfig.gpu_options.allow_growth = True  # noqa
             self.sess = tf.Session(config=tfconfig)
-            
+
             shorter_side = min(input_shape[1], input_shape[2])
             self.img_side_len = shorter_side
             self.discriminator = discriminator
@@ -62,9 +62,11 @@ class PoseModel3d:
             else:
                 self.in_placehold = tf.placeholder(tf.float32, input_shape)
                 self.in_placehold_loc = tf.placeholder(
-                    tf.float32, [None, config.n_joints, 2])
+                    tf.float32, [None, config.n_joints, 3])
                 self.outputs = build_model(
                     self.in_placehold, self.in_placehold_loc, training=False)
+
+            self.step = tf.train.create_global_step()
 
             self.saver_path = saver_path
             self.saver = None
@@ -148,7 +150,7 @@ class PoseModel3d:
             pose_loss_dir = tf.losses.mean_squared_error(
                 labels=gt_pose, predictions=out_pose)
             scaled_pose_loss_dir = pose_loss_dir * config.pose_loss_dir_scale
-            tf.summary.scalar('pose_loss_dir', scaled_pose_loss_dir, 
+            tf.summary.scalar('pose_loss_dir', scaled_pose_loss_dir,
                               family='losses')
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
@@ -205,18 +207,18 @@ class PoseModel3d:
                     tf.split(self.discriminator_outputs, 2, axis=0)
 
                 disc_real_loss = tf.losses.mean_squared_error(
-                    labels=tf.ones(tf.shape(gt_pose)), 
+                    labels=tf.ones(tf.shape(gt_pose)),
                     predictions=disc_real_out)
                 tf.summary.scalar('discriminator_real_loss', disc_real_loss,
                                   family='discriminator')
                 disc_fake_loss = tf.losses.mean_squared_error(
-                    labels=tf.zeros(tf.shape(out_pose)), 
+                    labels=tf.zeros(tf.shape(out_pose)),
                     predictions=disc_pred_out)
                 tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
                                   family='discriminator')
                 disc_total_loss = disc_real_loss + disc_fake_loss
                 disc_enc_loss = tf.losses.mean_squared_error(
-                    labels=tf.ones(tf.shape(out_pose)), 
+                    labels=tf.ones(tf.shape(out_pose)),
                     predictions=disc_pred_out)
                 disc_enc_scaled_loss = disc_enc_loss * config.disc_loss_scale
                 tf.summary.scalar('discriminator_loss', disc_enc_scaled_loss,
@@ -236,7 +238,8 @@ class PoseModel3d:
             optimizer = tf.train.AdamOptimizer(learning_rate=0.00002)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
-            train = optimizer.minimize(total_loss, var_list=encoder_vars)
+            train = optimizer.minimize(total_loss, global_step=self.step,
+                                       var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
 
             if self.saver is None:
@@ -246,12 +249,12 @@ class PoseModel3d:
 
             self.summary_writer.add_graph(self.graph)
 
-            for i in range(epochs):
+            for _ in range(epochs):
                 self.sess.run(iterator.initializer)
                 feed = {self.input_handle: train_handle}
-                j = 0
                 while True:
                     try:
+                        gs = tf.train.global_step(self.sess, self.step)
                         if self.discriminator:
                             _, summary_eval, _ = self.sess.run(
                                 (train, summary, train_discriminator),
@@ -260,15 +263,14 @@ class PoseModel3d:
                             _, summary_eval = self.sess.run(
                                 (train, summary),
                                 feed_dict=feed)
-                        self.summary_writer.add_summary(summary_eval, i)
+                        self.summary_writer.add_summary(summary_eval, gs)
                     except tf.errors.OutOfRangeError:
                         break
-                    print(j, end=' ', flush=True)
-                    if j % 1000 == 0:
+                    print(gs, end=' ', flush=True)
+                    if gs % 2000 == 0:
                         self.saver.save(self.sess,
-                                        self.saver_path, global_step=i)
-                    j += 1
-                self.saver.save(self.sess, self.saver_path, global_step=i)
+                                        self.saver_path, global_step=self.step)
+                self.saver.save(self.sess, self.saver_path, global_step=self.step)
 
     def evaluate(self):
         """ Evaluate the dataset passed in at the model creation time """

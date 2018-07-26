@@ -15,7 +15,9 @@ DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
-START_NAME = 'ung_86_02'  # Modify with name to start at
+START_NAME = '01_01'  # Modify with name to start at
+CHECK_HEATMAPS = False
+CHECK_JOINTS = True
 
 
 def read_maps(maps_file):
@@ -25,6 +27,15 @@ def read_maps(maps_file):
         # to shape: time, height, width, n_joints = 19
 
     return heatmaps, maps_file
+
+def read_joints(info_file):
+    print(info_file, file=sys.stderr)
+    info_dict = scipy.io.loadmat(info_file)
+    # in mat file - pose: [72xT], shape: [10xT], joints2D: [2x24xT]
+    # reshape to T as axis 0
+    joints2d = info_dict['joints2D']
+
+    return joints2d.astype(np.float32), info_file
 
 
 if __name__ == '__main__':
@@ -39,14 +50,28 @@ if __name__ == '__main__':
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = glob.glob(
             os.path.join(one_data_dir, basename + '_c*_maps.mat'))
+        # only get the info file and frames for heatmaps that exist
+        one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat',
+                                 one_dir_maps_files)
+        one_dir_frames_paths = map(lambda fn: fn[:-9] + '_frames',
+                                   one_dir_maps_files)
         maps_files.extend(one_dir_maps_files)
+        info_files.extend(one_dir_info_files)
+        frames_paths.extend(one_dir_frames_paths)
 
-    dataset = map(read_maps, maps_files)
+    dataset = map(read_joints, info_files)
     for value in dataset:
         try:
-            shape = value[0].shape
-            filename = value[1]
-            assert shape[1] == 240
+            if CHECK_HEATMAPS:
+                shape = value[0].shape
+                filename = value[1]
+                assert shape[1] == 240
+            if CHECK_JOINTS:
+                shape = value[0].shape
+                filename = value[1]
+                assert len(shape) == 3
+                assert shape[0] == 2
+                assert shape[1] == 24
         except AssertionError:
             print(filename)
             continue

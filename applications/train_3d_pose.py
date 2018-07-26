@@ -54,6 +54,6 @@ if __name__ == '__main__':
                         restore_model=True,
                         mesh_loss=True,
                         smpl_model=smpl_neutral,
-                        discriminator=True)
+                        discriminator=False)
 
     pm_3d.train(batch_size=32, epochs=500)

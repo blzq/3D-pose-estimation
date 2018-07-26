@@ -41,8 +41,9 @@ def main():
     heatmaps = estimator.heatMat
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
-    inputs = np.concatenate([heatmaps, in_im[np.newaxis]], axis=3)
-    input_locs = heatmaps_to_locations(inputs).reshape([1, config.n_joints, 2])
+    in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
+    inputs = np.concatenate([heatmaps, in_im_3d[np.newaxis]], axis=3)
+    input_locs = heatmaps_to_locations(heatmaps).reshape([1, config.n_joints, 3])
 
     # with different graph so checkpoint is restored correctly
     pm_graph = tf.Graph()
@@ -63,7 +64,7 @@ def main():
 
     smpl = SMPL(smpl_model_path)
     beta = tf.zeros([1, 10])
-    pose = tf.constant(out_vals)
+    pose = tf.constant(out_vals[:, :72])
 
     verts, _, _ = smpl(beta, pose, get_skin=True)
     verts = verts[0]
