@@ -162,12 +162,12 @@ class PoseModel3d:
             total_loss = pose_loss + reg_loss + pose_loss_dir
 
             if self.mesh_loss or self.reproject_loss:
-                out_meshes, _, _ = self.smpl(betas, out_pose,
-                                             get_skin=True)
+                out_meshes, _, _ = self.smpl(betas, out_pose, get_skin=True)
                 out_joints = self.smpl.J_transformed
+                gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
+                gt_joints = self.smpl.J_transformed
 
             if self.mesh_loss:
-                gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_meshes, predictions=out_meshes,
                     weights=config.mesh_loss_scale)
@@ -193,11 +193,27 @@ class PoseModel3d:
                 out_2d = (out_2d + 1) * self.img_side_len * 0.5
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.huber_loss(
-                    labels=tf.reshape(smpl_joints2d, [-1, 2]), 
+                    labels=tf.reshape(smpl_joints2d, [-1, 2]),
                     predictions=out_2d,
                     delta=16.0, weights=config.reproj_loss_scale)
                 tf.summary.scalar('reproj_loss', reproj_loss, family='losses')
                 total_loss += reproj_loss
+                with tf.variable_scope("projection"):
+                    out_2d_gt_pose = project(tf.reshape(gt_joints, [-1, 3]),
+                                             tf.reshape(out_cam_pos, [-1, 3]),
+                                             tf.reshape(out_cam_rot, [-1, 3]),
+                                             tf.reshape(out_cam_foc, [-1]))
+                # Flip x, y to y, x
+                out_2d_gt_pose = tf.gather(out_2d_gt_pose, [1, 0], axis=1)
+                # Rescale to image size
+                out_2d_gt_pose = (out_2d_gt_pose + 1) * self.img_side_len * 0.5
+                # joints2d reshape from (batch, j, 2) to (batch * j, 2)
+                cam_loss = tf.losses.huber_loss(
+                    labels=tf.reshape(smpl_joints2d, [-1, 2]),
+                    predictions=out_2d_gt_pose, 
+                    delta=16.0, weights=config.cam_loss_scale)
+                tf.summary.scalar('cam_loss', cam_loss, family='losses')
+                total_loss += cam_loss
 
             if self.discriminator:
                 disc_real_out, disc_pred_out = \
@@ -214,7 +230,7 @@ class PoseModel3d:
                 tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
                                   family='discriminator')
                 disc_total_loss = disc_real_loss + disc_fake_loss
-                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.00004)
+                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -225,14 +241,14 @@ class PoseModel3d:
                 disc_enc_loss = tf.losses.mean_squared_error(
                     labels=tf.ones(tf.shape(out_pose)),
                     predictions=disc_pred_out, weights=config.disc_loss_scale)
-                tf.summary.scalar('discriminator_loss', disc_enc_loss, 
+                tf.summary.scalar('discriminator_loss', disc_enc_loss,
                                   family='losses')
                 total_loss += disc_enc_loss
 
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.00002)
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.00004)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -256,7 +272,7 @@ class PoseModel3d:
                         gs = tf.train.global_step(self.sess, self.step)
                         if self.discriminator:
                             _, summary_eval, _ = self.sess.run(
-                                (train, summary, train_discriminator), 
+                                (train, summary, train_discriminator),
                                 feed_dict=feed)
                         else:
                             _, summary_eval = self.sess.run(
@@ -266,9 +282,9 @@ class PoseModel3d:
                         break
                     print(gs, end=' ', flush=True)
                     if gs % 2000 == 0:
-                        self.saver.save(self.sess, self.saver_path, 
+                        self.saver.save(self.sess, self.saver_path,
                                         global_step=self.step)
-                self.saver.save(self.sess, self.saver_path, 
+                self.saver.save(self.sess, self.saver_path,
                                 global_step=self.step)
 
     def evaluate(self):

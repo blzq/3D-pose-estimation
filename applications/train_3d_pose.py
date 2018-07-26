@@ -19,7 +19,7 @@ SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
 if __name__ == '__main__':
     dataset_dir = os.path.realpath(DATASET_PATH)
-    basenames = sorted(os.listdir(dataset_dir))
+    basenames = os.listdir(dataset_dir)
 
     smpl_path = os.path.join(
         __init__.project_path, 'data', 'SMPL_model', 'models_numpy')
