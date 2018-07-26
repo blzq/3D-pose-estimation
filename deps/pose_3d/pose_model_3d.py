@@ -238,8 +238,10 @@ class PoseModel3d:
             optimizer = tf.train.AdamOptimizer(learning_rate=0.00002)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
-            train = optimizer.minimize(total_loss, global_step=self.step,
-                                       var_list=encoder_vars)
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                train = optimizer.minimize(total_loss, global_step=self.step,
+                                           var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
 
             if self.saver is None:
