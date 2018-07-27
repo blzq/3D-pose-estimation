@@ -54,11 +54,11 @@ def _bilinear_residual_block(inputs, units, training: bool):
 
     linear2 = tf.layers.dense(dropout1, units)
     bn2 = tf.layers.batch_normalization(linear2, training=training)
-    relu2 = tf.nn.relu(bn2)
-    dropout2 = tf.layers.dropout(relu2, 0.3, training=training)
+    dropout2 = tf.layers.dropout(bn2, 0.3, training=training)
 
     add = tf.add(inputs, dropout2)
-    return add
+    relu2 = tf.nn.relu(add)
+    return relu2
 
 
 def _mobilenetv2(inputs, training: bool, alpha=1.4):
