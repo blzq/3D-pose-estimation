@@ -130,19 +130,8 @@ class PoseModel3d:
             self.summary_writer.add_summary(summary_val)
         return out
 
-    def train(self, batch_size: int, epochs: int):
-        """ Train the model using the dataset passed in at model creation """
+    def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d):
         with self.graph.as_default():
-            self.dataset = self.dataset.shuffle(batch_size * 16)
-            self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(batch_size * 2)
-            iterator = self.dataset.make_initializable_iterator()
-            train_handle = self.sess.run(iterator.string_handle())
-
-            _, _, gt_pose, betas, smpl_joints2d = self.next_input
-
-            out_pose = self.outputs[:, :72]
-
             with tf.variable_scope("rodrigues"):
                 out_mat = rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
                 gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))
@@ -215,21 +204,50 @@ class PoseModel3d:
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 total_loss += cam_loss
 
-            if self.discriminator:
-                disc_real_out, disc_pred_out = \
-                    tf.split(self.discriminator_outputs, 2, axis=0)
+            return total_loss
 
-                disc_real_loss = tf.losses.mean_squared_error(
-                    labels=tf.ones(tf.shape(gt_pose)),
-                    predictions=disc_real_out)
-                tf.summary.scalar('discriminator_real_loss', disc_real_loss,
-                                  family='discriminator')
-                disc_fake_loss = tf.losses.mean_squared_error(
-                    labels=tf.zeros(tf.shape(out_pose)),
-                    predictions=disc_pred_out)
-                tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
-                                  family='discriminator')
-                disc_total_loss = disc_real_loss + disc_fake_loss
+    def get_discriminator_loss(self, out_pose, gt_pose):
+        with self.graph.as_default():
+            disc_real_out, disc_pred_out = \
+                tf.split(self.discriminator_outputs, 2, axis=0)
+
+            disc_real_loss = tf.losses.mean_squared_error(
+                labels=tf.ones(tf.shape(gt_pose)),
+                predictions=disc_real_out)
+            tf.summary.scalar('discriminator_real_loss', disc_real_loss,
+                                family='discriminator')
+            disc_fake_loss = tf.losses.mean_squared_error(
+                labels=tf.zeros(tf.shape(out_pose)),
+                predictions=disc_pred_out)
+            tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
+                                family='discriminator')
+            disc_total_loss = disc_real_loss + disc_fake_loss
+
+            disc_enc_loss = tf.losses.mean_squared_error(
+                labels=tf.ones(tf.shape(out_pose)),
+                predictions=disc_pred_out, weights=config.disc_loss_scale)
+            tf.summary.scalar('discriminator_loss', disc_enc_loss,
+                                family='losses')
+            return disc_total_loss, disc_enc_loss
+
+    def train(self, batch_size: int, epochs: int):
+        """ Train the model using the dataset passed in at model creation """
+        with self.graph.as_default():
+            self.dataset = self.dataset.shuffle(batch_size * 16)
+            self.dataset = self.dataset.batch(batch_size)
+            self.dataset = self.dataset.prefetch(batch_size * 2)
+            iterator = self.dataset.make_initializable_iterator()
+            train_handle = self.sess.run(iterator.string_handle())
+
+            _, _, gt_pose, betas, smpl_joints2d = self.next_input
+            out_pose = self.outputs[:, :72]
+
+            total_loss = self.get_encoder_losses(
+                out_pose, gt_pose, betas, smpl_joints2d)
+            
+            if self.discriminator:
+                disc_total_loss, disc_enc_loss = self.get_discriminator_loss(
+                    out_pose, gt_pose)
                 disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
@@ -237,18 +255,13 @@ class PoseModel3d:
                     disc_total_loss, var_list=discriminator_vars)
                 self.sess.run(tf.variables_initializer(
                     disc_optimizer.variables()))
-
-                disc_enc_loss = tf.losses.mean_squared_error(
-                    labels=tf.ones(tf.shape(out_pose)),
-                    predictions=disc_pred_out, weights=config.disc_loss_scale)
-                tf.summary.scalar('discriminator_loss', disc_enc_loss,
-                                  family='losses')
                 total_loss += disc_enc_loss
 
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.00004)
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.00005,
+                                               epsilon=0.001)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

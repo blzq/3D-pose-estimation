@@ -34,8 +34,9 @@ def read_joints(info_file):
     # in mat file - pose: [72xT], shape: [10xT], joints2D: [2x24xT]
     # reshape to T as axis 0
     joints2d = info_dict['joints2D']
+    pose = info_dict['pose']
 
-    return joints2d.astype(np.float32), info_file
+    return joints2d.astype(np.float32), info_file, pose
 
 
 if __name__ == '__main__':
@@ -68,10 +69,12 @@ if __name__ == '__main__':
                 assert shape[1] == 240
             if CHECK_JOINTS:
                 shape = value[0].shape
-                filename = value[1]
+                info_filename = value[1]
+                filename = info_filename[:-9] + '_maps.mat'
                 assert len(shape) == 3
                 assert shape[0] == 2
                 assert shape[1] == 24
+                assert (np.amax(value[2]) < 1.5 * np.pi)
         except AssertionError:
             print(filename)
             continue

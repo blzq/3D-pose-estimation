@@ -6,6 +6,7 @@ import __init__
 import sys
 import os
 import glob
+import random
 
 import tensorflow as tf
 import numpy as np
@@ -20,6 +21,7 @@ SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 if __name__ == '__main__':
     dataset_dir = os.path.realpath(DATASET_PATH)
     basenames = os.listdir(dataset_dir)
+    random.shuffle(basenames)
 
     smpl_path = os.path.join(
         __init__.project_path, 'data', 'SMPL_model', 'models_numpy')
