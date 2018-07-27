@@ -14,11 +14,11 @@ def build_model(inputs, inputs_locs, training: bool):
             in_channels = inputs.get_shape().as_list()[-1]
             in_1x1 = tf.layers.conv2d(inputs, in_channels, [1, 1])
             in_bn = tf.layers.batch_normalization(in_1x1, training=training)
-            in_relu = tf.nn.leaky_relu(in_bn)
+            in_relu = tf.nn.relu(in_bn)
 
             init_conv1 = tf.layers.conv2d(in_relu, 32, [3, 3], 1)
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
-            conv_relu1 = tf.nn.leaky_relu(bn1)
+            conv_relu1 = tf.nn.relu(bn1)
 
         with tf.variable_scope('mobilenetv2'):
             mn = _mobilenetv2(conv_relu1, training, alpha=1.0)
@@ -30,7 +30,7 @@ def build_model(inputs, inputs_locs, training: bool):
 
             init_linear = tf.layers.dense(in_concat, 1024)
             init_bn = tf.layers.batch_normalization(init_linear, training=training)
-            linear_relu = tf.nn.leaky_relu(init_bn)
+            linear_relu = tf.nn.relu(init_bn)
 
         with tf.variable_scope('bilinear_blocks'):
             bl1 = _bilinear_residual_block(linear_relu, 1024, training)
@@ -49,12 +49,12 @@ def build_model(inputs, inputs_locs, training: bool):
 def _bilinear_residual_block(inputs, units, training: bool):
     linear1 = tf.layers.dense(inputs, units)
     bn1 = tf.layers.batch_normalization(linear1, training=training)
-    relu1 = tf.nn.leaky_relu(bn1)
+    relu1 = tf.nn.relu(bn1)
     dropout1 = tf.layers.dropout(relu1, 0.3, training=training)
 
     linear2 = tf.layers.dense(dropout1, units)
     bn2 = tf.layers.batch_normalization(linear2, training=training)
-    relu2 = tf.nn.leaky_relu(bn2)
+    relu2 = tf.nn.relu(bn2)
     dropout2 = tf.layers.dropout(relu2, 0.3, training=training)
 
     add = tf.add(inputs, dropout2)
@@ -65,7 +65,7 @@ def _mobilenetv2(inputs, training: bool, alpha=1.4):
     init_filters = _make_divisible(32 * alpha, 8)
     init_conv2d = tf.layers.conv2d(inputs, init_filters, [3, 3], 2)
     init_bn = tf.layers.batch_normalization(init_conv2d, training=training)
-    init_relu = tf.nn.leaky_relu(init_bn)
+    init_relu = tf.nn.relu6(init_bn)
 
     mn1 = _mobilenetv2_block(init_relu, 16, 1, 1, alpha, training)
 
@@ -94,7 +94,7 @@ def _mobilenetv2(inputs, training: bool, alpha=1.4):
     last_filters = _make_divisible(1280 * alpha, 8) if alpha > 1.0 else 1280
     last_conv = tf.layers.conv2d(mn17, last_filters, [1, 1])
     last_bn = tf.layers.batch_normalization(last_conv, training=training)
-    last_relu = tf.nn.leaky_relu(last_bn)
+    last_relu = tf.nn.relu6(last_bn)
 
     pool = tf.reduce_mean(last_relu, axis=[1, 2])
     return pool
@@ -108,7 +108,7 @@ def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int,
     if expansion > 1:
         expand = tf.layers.conv2d(inputs, expansion * in_channels, [1, 1])
         ex_bn = tf.layers.batch_normalization(expand, training=training)
-        ex_out = tf.nn.leaky_relu(ex_bn)
+        ex_out = tf.nn.relu6(ex_bn)
     else:
         ex_out = inputs
 
@@ -118,7 +118,7 @@ def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int,
     depthwise = tf.layers.separable_conv2d(ex_out, d_channels, [3, 3], stride,
                                            padding='same')
     dw_bn = tf.layers.batch_normalization(depthwise, training=training)
-    dw_relu = tf.nn.leaky_relu(dw_bn)
+    dw_relu = tf.nn.relu6(dw_bn)
     pointwise = tf.layers.conv2d(dw_relu, pointwise_conv_filters, [1, 1])
     pw_bn = tf.layers.batch_normalization(pointwise, training=training)
 
