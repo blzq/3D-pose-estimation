@@ -83,6 +83,13 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = np.reshape(locations, [hs[0], hs[3], 2])
     # locations: (batch, c, 2 = [y, x])
     locations = locations.astype(np.float32)
+    # Normalize detection locations by image size
+    # Move centre of image to (0, 0)
+    locations = locations - (0.5 * np.array([[[hs[1], hs[2]]]]))
+    # Scale detection locations by shorter side length
+    img_side_length = min(hs[1], hs[2])
+    locations = locations / img_side_length
+
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost

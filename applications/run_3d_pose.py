@@ -26,7 +26,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     in_im = cv2.resize(in_im, dsize=(320, 240),
                        interpolation=cv2.INTER_AREA)

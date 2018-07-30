@@ -136,19 +136,26 @@ class PoseModel3d:
                 out_mat = rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
                 gt_mat = rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))
 
-            pose_loss_dir = tf.losses.mean_squared_error(
+            pose_loss_direct = tf.losses.mean_squared_error(
                 labels=gt_pose, predictions=out_pose,
-                weights=config.pose_loss_dir_scale)
-            tf.summary.scalar('pose_loss_dir', pose_loss_dir, family='losses')
+                weights=config.pose_loss_direct_scale)
+            tf.summary.scalar('pose_loss_direct', pose_loss_direct,
+                              family='losses')
             pose_loss = tf.losses.mean_squared_error(
                 labels=gt_mat, predictions=out_mat)
             tf.summary.scalar('pose_loss', pose_loss, family='losses')
 
+            out_pose_norm = tf.norm(tf.reshape(out_pose, [-1, 24, 3]), axis=2)
+            out_pose_norm_zeros = tf.zeros(tf.shape(out_pose_norm))
+            greater_mask = tf.greater(out_pose_norm, config.reg_joint_limit)
+            out_pose_too_large = tf.where(
+                greater_mask, out_pose_norm, out_pose_norm_zeros)
             reg_loss = tf.losses.mean_squared_error(
-                labels=tf.zeros(tf.shape(gt_pose)), predictions=out_pose,
+                labels=out_pose_norm_zeros, predictions=out_pose_too_large,
                 weights=config.reg_loss_scale)
             tf.summary.scalar('reg_loss', reg_loss, family='losses')
-            total_loss = pose_loss + reg_loss + pose_loss_dir
+            
+            total_loss = pose_loss + reg_loss + pose_loss_direct
 
             if self.mesh_loss or self.reproject_loss:
                 out_meshes, _, _ = self.smpl(betas, out_pose, get_skin=True)
@@ -199,7 +206,7 @@ class PoseModel3d:
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 cam_loss = tf.losses.huber_loss(
                     labels=tf.reshape(smpl_joints2d, [-1, 2]),
-                    predictions=out_2d_gt_pose, 
+                    predictions=out_2d_gt_pose,
                     delta=16.0, weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 total_loss += cam_loss
@@ -244,7 +251,7 @@ class PoseModel3d:
 
             total_loss = self.get_encoder_losses(
                 out_pose, gt_pose, betas, smpl_joints2d)
-            
+
             if self.discriminator:
                 disc_total_loss, disc_enc_loss = self.get_discriminator_loss(
                     out_pose, gt_pose)
@@ -277,6 +284,7 @@ class PoseModel3d:
 
             self.summary_writer.add_graph(self.graph)
 
+            # Train loop
             for _ in range(epochs):
                 self.sess.run(iterator.initializer)
                 feed = {self.input_handle: train_handle}
