@@ -155,7 +155,7 @@ class PoseModel3d:
                 weights=config.reg_loss_scale)
             tf.summary.scalar('reg_loss', reg_loss, family='losses')
             
-            total_loss = pose_loss + reg_loss + pose_loss_direct
+            total_loss = pose_loss + reg_loss  # + pose_loss_direct
 
             if self.mesh_loss or self.reproject_loss:
                 out_meshes, _, _ = self.smpl(betas, out_pose, get_skin=True)
@@ -167,8 +167,11 @@ class PoseModel3d:
                 mesh_loss = tf.losses.mean_squared_error(
                     labels=gt_meshes, predictions=out_meshes,
                     weights=config.mesh_loss_scale)
-                tf.summary.scalar('mesh_loss', mesh_loss, family='losses')
-                total_loss += mesh_loss
+                joint_loss = tf.losses.mean_squared_error(
+                    labels=gt_joints, predictions=out_joints)
+                loss3d = mesh_loss + joint_loss
+                tf.summary.scalar('mesh_loss', loss3d, family='losses')
+                total_loss += loss3d
 
             if self.reproject_loss:
                 out_cam_pos = tf.tile(self.outputs[:, 72:75],

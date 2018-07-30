@@ -74,7 +74,8 @@ if __name__ == '__main__':
                 assert len(shape) == 3
                 assert shape[0] == 2
                 assert shape[1] == 24
-                assert (np.amax(value[2]) < 1.5 * np.pi)
+                assert (np.amax(value[2]) < 2 * np.pi)
+                assert (np.amin(value[2]) > -2 * np.pi)
         except AssertionError:
             print(filename)
             continue

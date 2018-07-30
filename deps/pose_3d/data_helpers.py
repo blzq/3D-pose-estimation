@@ -85,10 +85,11 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = locations.astype(np.float32)
     # Normalize detection locations by image size
     # Move centre of image to (0, 0)
-    locations = locations - (0.5 * np.array([[[hs[1], hs[2]]]]))
+    img_dim = hs[1:3]
+    np.subtract(locations, img_dim, out=locations)
     # Scale detection locations by shorter side length
-    img_side_length = min(hs[1], hs[2])
-    locations = locations / img_side_length
+    img_side_length = np.amin(img_dim)
+    np.divide(locations, img_side_length, out=locations)
 
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
