@@ -66,7 +66,7 @@ class PoseModel3d:
                 self.outputs = build_model(
                     self.in_placehold, self.in_placehold_loc, training=False)
 
-            self.step = tf.train.create_global_step()
+            self.step = tf.train.get_or_create_global_step()
 
             self.saver_path = saver_path
             self.saver = None
@@ -142,7 +142,8 @@ class PoseModel3d:
             tf.summary.scalar('pose_loss_direct', pose_loss_direct,
                               family='losses')
             pose_loss = tf.losses.mean_squared_error(
-                labels=gt_mat, predictions=out_mat)
+                labels=gt_mat, predictions=out_mat,
+                weights=config.pose_loss_scale)
             tf.summary.scalar('pose_loss', pose_loss, family='losses')
 
             out_pose_norm = tf.norm(tf.reshape(out_pose, [-1, 24, 3]), axis=2)
@@ -168,9 +169,10 @@ class PoseModel3d:
                     labels=gt_meshes, predictions=out_meshes,
                     weights=config.mesh_loss_scale)
                 joint_loss = tf.losses.mean_squared_error(
-                    labels=gt_joints, predictions=out_joints)
+                    labels=gt_joints, predictions=out_joints,
+                    weights=config.joint_loss_scale)
                 loss3d = mesh_loss + joint_loss
-                tf.summary.scalar('mesh_loss', loss3d, family='losses')
+                tf.summary.scalar('3d_loss', loss3d, family='losses')
                 total_loss += loss3d
 
             if self.reproject_loss:
@@ -258,7 +260,7 @@ class PoseModel3d:
             if self.discriminator:
                 disc_total_loss, disc_enc_loss = self.get_discriminator_loss(
                     out_pose, gt_pose)
-                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0002)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -270,8 +272,7 @@ class PoseModel3d:
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.00005,
-                                               epsilon=0.001)
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

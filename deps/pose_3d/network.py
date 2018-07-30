@@ -41,7 +41,6 @@ def build_model(inputs, inputs_locs, training: bool):
             out = tf.layers.dense(bl3, 79) # 24*3 rotations + 7 camera params
 
         tf.summary.histogram('out_pose', out[:, :72])
-        tf.summary.histogram('out_cam', out[:, 72:])
 
     return out
 

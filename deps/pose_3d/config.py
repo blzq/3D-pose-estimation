@@ -2,8 +2,10 @@
 
 from math import pi
 
+pose_loss_scale = 1.0
 pose_loss_direct_scale = 0.05
 mesh_loss_scale = 2.5
+joint_loss_scale = 10.0
 reg_loss_scale = 10.0
 reg_joint_limit = pi * 2.0
 disc_loss_scale = 2
