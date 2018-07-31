@@ -16,7 +16,7 @@ from tf_pose.estimator import TfPoseEstimator as OpPoseEstimator
 from tf_pose.networks import get_graph_path
 
 from pose_3d.pose_model_3d import PoseModel3d
-from pose_3d.data_helpers import *
+from pose_3d.data_helpers import heatmaps_to_locations, suppress_non_largest_human
 from pose_3d import config
 
 from tf_smpl.batch_smpl import SMPL
@@ -26,19 +26,39 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'coco3.png'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
-    in_im = cv2.resize(in_im, dsize=(320, 240),
+    expect_sz = config.input_img_size
+    expect_aspect = expect_sz[1] / expect_sz[0]
+    in_shape = in_im.shape
+    in_aspect = in_shape[1] / in_shape[0]
+    if in_aspect != expect_aspect:
+        if in_im.shape[1] >= in_im.shape[0] * expect_aspect:
+            diff = int(in_im.shape[1] - in_im.shape[0] * expect_aspect)
+            pad_im = cv2.copyMakeBorder(in_im, 0, diff, 0, 0, 
+                                        cv2.BORDER_CONSTANT, None, 0)
+        else:
+            diff = int(in_im.shape[0] * expect_aspect - in_im.shape[1])
+            pad_im = cv2.copyMakeBorder(in_im, 0, 0, 0, diff,
+                                        cv2.BORDER_CONSTANT, None, 0)
+        in_im = pad_im
+
+    in_im = cv2.resize(in_im, dsize=(expect_sz[1], expect_sz[0]),
                        interpolation=cv2.INTER_AREA)
 
     tfconfig = tf.ConfigProto()
     tfconfig.gpu_options.allow_growth = True  # pylint: disable=no-member
     with tf.Graph().as_default():
         estimator = OpPoseEstimator(get_graph_path('cmu'),
-                                    target_size=(320, 240), tf_config=tfconfig)
+                                    target_size=(expect_sz[1], expect_sz[0]),
+                                    tf_config=tfconfig)
     humans = estimator.inference(in_im,
                                  resize_to_default=True, upsample_size=8.0)
-    heatmaps = estimator.heatMat
+    heatmaps = suppress_non_largest_human(humans, estimator.heatMat,
+                                          expect_sz)
+    print(heatmaps.shape)
+    plt.imshow(np.sum(heatmaps, axis=2))
+    plt.show()
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)

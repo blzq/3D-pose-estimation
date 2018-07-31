@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
-from tf_pose.common import CocoPart
+from tf_pose import common
 from . import config
 
 
@@ -16,7 +16,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
     dataset = dataset.apply(tf.contrib.data.parallel_interleave(
         lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(
             tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
-                             [tf.float32, tf.float32, tf.float32, 
+                             [tf.float32, tf.float32, tf.float32,
                               tf.float32, tf.float32]))),
         cycle_length=4, block_length=1, sloppy=True))
 
@@ -95,8 +95,8 @@ def heatmaps_to_locations(heatmaps_image_stack):
 
     # Maybe don't want to do this part because information for camera is lost
     # Normalize centre of person as middle of left and right hips
-    # rhip_idx = CocoPart.RHip.value
-    # lhip_idx = CocoPart.LHip.value
+    # rhip_idx = common.CocoPart.RHip.value
+    # lhip_idx = common.CocoPart.LHip.value
     # centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
     # locations = locations - centres[:, np.newaxis]
     # locations = np.reshape(locations, [hs[0], -1])
@@ -105,3 +105,35 @@ def heatmaps_to_locations(heatmaps_image_stack):
     # locations = locations / maxs
 
     return locations_with_vals
+
+def suppress_non_largest_human(humans, heatmaps, expected_in_size):
+    d = 8  # padding around other humans to suppress
+    largest_human_size = 0
+    human_extents = []
+    largest_human_idx = -1
+    # Find human extents
+    for h_idx, human in enumerate(humans):
+        min_x, max_x = float('inf'), 0
+        min_y, max_y = float('inf'), 0
+        for i in range(common.CocoPart.Background.value):
+            if i not in human.body_parts.keys():
+                continue
+            body_part = human.body_parts[i]
+            center = (int(body_part.x * expected_in_size[1] + 0.5),
+                      int(body_part.y * expected_in_size[0] + 0.5))
+            max_x = max(center[0], max_x)
+            min_x = min(center[0], min_x)
+            max_y = max(center[1], max_y)
+            min_y = min(center[1], min_y)
+        human_extents.append((min_x, max_x, min_y, max_y))
+        one_largest_range = max(max_x - min_x, max_y - min_y)
+        if one_largest_range > largest_human_size:
+            largest_human_size = one_largest_range
+            largest_human_idx = h_idx
+
+    # Suppress humans that are not the largest human in the image
+    for h_idx, extent in enumerate(human_extents):
+        if h_idx != largest_human_idx:
+            min_e_x, max_e_x, min_e_y, max_e_y = extent
+            heatmaps[min_e_y-d : max_e_y+d, min_e_x-d : max_e_x+d] = 0
+    return heatmaps

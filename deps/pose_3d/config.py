@@ -13,3 +13,5 @@ reproj_loss_scale = 0.000016
 n_joints = 18  # COCO number of joints (not including background)
 n_joints_smpl = 24  # SMPL model number of joints
 cam_loss_scale = 0.000016
+
+input_img_size = (240, 320)
