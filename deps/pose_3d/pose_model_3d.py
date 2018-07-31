@@ -301,7 +301,7 @@ class PoseModel3d:
                         self.summary_writer.add_summary(summary_eval, gs)
                     except tf.errors.OutOfRangeError:
                         break
-                    print(gs, end=' ', flush=True)
+                    print("{:7}".format(gs), end=' ', flush=True)
                     if gs % 2000 == 0:
                         self.saver.save(self.sess, self.saver_path,
                                         global_step=self.step)

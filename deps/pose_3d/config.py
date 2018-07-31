@@ -15,3 +15,29 @@ n_joints_smpl = 24  # SMPL model number of joints
 cam_loss_scale = 0.000016
 
 input_img_size = (240, 320)
+
+# SMPL model joints in order:
+# 0: CentreHip (Global rotation)
+# 1: RHip
+# 2: LHip
+# 3: BackLower (Stomach)
+# 4: RKnee
+# 5: LKnee
+# 6: BackCentre
+# 7: RAnkle
+# 8: LAnkle
+# 9: BackUpper
+# 10: RFoot
+# 11: LFoot
+# 12: NeckLower (Head)
+# 13: RShoulderInner
+# 14: LShoulderInner
+# 15: NeckUpper
+# 16: RShoulderOuter
+# 17: LShoulderInner
+# 18: RElbow
+# 19: LElbow
+# 20: RWrist
+# 21: LWrist
+# 22: RHand
+# 23: LHand
