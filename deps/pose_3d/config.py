@@ -18,26 +18,26 @@ input_img_size = (240, 320)
 
 # SMPL model joints in order:
 # 0: CentreHip (Global rotation)
-# 1: RHip
-# 2: LHip
+# 1: LHip
+# 2: RHip
 # 3: BackLower (Stomach)
-# 4: RKnee
-# 5: LKnee
+# 4: LKnee
+# 5: RKnee
 # 6: BackCentre
-# 7: RAnkle
-# 8: LAnkle
+# 7: LAnkle
+# 8: RAnkle
 # 9: BackUpper
-# 10: RFoot
-# 11: LFoot
-# 12: NeckLower (Head)
-# 13: RShoulderInner
-# 14: LShoulderInner
+# 10: LFoot
+# 11: RFoot
+# 12: NeckLower
+# 13: LShoulderInner
+# 14: RShoulderInner
 # 15: NeckUpper
-# 16: RShoulderOuter
-# 17: LShoulderInner
-# 18: RElbow
-# 19: LElbow
-# 20: RWrist
-# 21: LWrist
-# 22: RHand
-# 23: LHand
+# 16: LShoulderOuter
+# 17: RShoulderInner
+# 18: LElbow
+# 19: RElbow
+# 20: LWrist
+# 21: RWrist
+# 22: LHand
+# 23: RHand
