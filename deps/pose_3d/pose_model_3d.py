@@ -188,8 +188,6 @@ class PoseModel3d:
                                      tf.reshape(out_cam_pos, [-1, 3]),
                                      tf.reshape(out_cam_rot, [-1, 3]),
                                      tf.reshape(out_cam_foc, [-1]))
-                # Flip x, y to y, x
-                out_2d = tf.gather(out_2d, [1, 0], axis=1)
                 # Rescale to image size
                 out_2d = (out_2d + 1) * self.img_side_len * 0.5
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
@@ -204,8 +202,6 @@ class PoseModel3d:
                                              tf.reshape(out_cam_pos, [-1, 3]),
                                              tf.reshape(out_cam_rot, [-1, 3]),
                                              tf.reshape(out_cam_foc, [-1]))
-                # Flip x, y to y, x
-                out_2d_gt_pose = tf.gather(out_2d_gt_pose, [1, 0], axis=1)
                 # Rescale to image size
                 out_2d_gt_pose = (out_2d_gt_pose + 1) * self.img_side_len * 0.5
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
@@ -338,8 +334,6 @@ class PoseModel3d:
                                  tf.reshape(out_cam_pos, [-1, 3]),
                                  tf.reshape(out_cam_rot, [-1, 3]),
                                  tf.reshape(out_cam_foc, [-1]))
-            # Flip x, y to y, x
-            out_2d = tf.gather(out_2d, [1, 0], axis=1)
             # Rescale to image size
             out_2d = (out_2d + 1) * self.img_side_len * 0.5
             # joints2d reshape from (batch, j, 2) to (batch * j, 2)

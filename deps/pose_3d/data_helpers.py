@@ -27,6 +27,8 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
         # to shape: time, height, width, n_joints = 19
+    # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
+    heatmaps = np.flip(heatmaps, axis=2)
     img_size_x = heatmaps.shape[2]
 
     info_dict = scipy.io.loadmat(info_file)
@@ -43,7 +45,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     frames = [ cv2.normalize(frame, None, 0, 1, cv2.NORM_MINMAX)
                for frame in frames ]
     # Flip image horizontally because image and 3D GT are flipped in SURREAL
-    frames = [ cv2.flip(frame, 1) for frame in frames ]
+    frames = np.flip(frames, axis=2)
     # frames = [ cv2.resize(frame,
     #                       dsize=(heatmaps.shape[2], heatmaps.shape[1]),
     #                       interpolation=cv2.INTER_AREA)
