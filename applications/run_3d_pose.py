@@ -26,7 +26,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'coco3.png'))
+    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     expect_sz = config.input_img_size
     expect_aspect = expect_sz[1] / expect_sz[0]

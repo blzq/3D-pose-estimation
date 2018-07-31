@@ -27,6 +27,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
         # to shape: time, height, width, n_joints = 19
+    img_size_x = heatmaps.shape[2]
 
     info_dict = scipy.io.loadmat(info_file)
     # in mat file - pose: [72xT], shape: [10xT], joints2D: [2x24xT]
@@ -34,12 +35,15 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     poses = np.transpose(info_dict['pose'], (1, 0))
     shapes = np.transpose(info_dict['shape'], (1, 0))
     joints2d = np.transpose(info_dict['joints2D'], (2, 1, 0))
-    # 24 SMPL joints are:
+    # Flip 2D GT horizontally because image and 3D GT are flipped in SURREAL
+    joints2d = img_size_x - joints2d
 
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
     frames = [ cv2.normalize(frame, None, 0, 1, cv2.NORM_MINMAX)
                for frame in frames ]
+    # Flip image horizontally because image and 3D GT are flipped in SURREAL
+    frames = [ cv2.flip(frame, 1) for frame in frames ]
     # frames = [ cv2.resize(frame,
     #                       dsize=(heatmaps.shape[2], heatmaps.shape[1]),
     #                       interpolation=cv2.INTER_AREA)
