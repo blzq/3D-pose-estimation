@@ -26,7 +26,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     expect_sz = config.input_img_size
     expect_aspect = expect_sz[1] / expect_sz[0]
@@ -35,7 +35,7 @@ def main():
     if in_aspect != expect_aspect:
         if in_im.shape[1] >= in_im.shape[0] * expect_aspect:
             diff = int(in_im.shape[1] - in_im.shape[0] * expect_aspect)
-            pad_im = cv2.copyMakeBorder(in_im, 0, diff, 0, 0, 
+            pad_im = cv2.copyMakeBorder(in_im, 0, diff, 0, 0,
                                         cv2.BORDER_CONSTANT, None, 0)
         else:
             diff = int(in_im.shape[0] * expect_aspect - in_im.shape[1])

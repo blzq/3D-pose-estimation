@@ -2,6 +2,8 @@ import os.path
 
 import tensorflow as tf
 import numpy as np
+from tensorboard.plugins.beholder import Beholder
+from tensorflow.contrib.data.python.ops import prefetching_ops
 
 from .network import build_model, build_discriminator
 from . import config
@@ -74,6 +76,7 @@ class PoseModel3d:
             subdir = 'train' if training else 'test'
             self.summary_writer = tf.summary.FileWriter(
                 os.path.join(summary_dir, subdir), self.graph)
+            # self.beholder = Beholder(os.path.join(summary_dir, subdir))
 
             self.sess.run(tf.global_variables_initializer())
 
@@ -155,7 +158,7 @@ class PoseModel3d:
                 labels=out_pose_norm_zeros, predictions=out_pose_too_large,
                 weights=config.reg_loss_scale)
             tf.summary.scalar('reg_loss', reg_loss, family='losses')
-            
+
             total_loss = pose_loss + reg_loss  # + pose_loss_direct
 
             if self.mesh_loss or self.reproject_loss:
@@ -241,9 +244,11 @@ class PoseModel3d:
     def train(self, batch_size: int, epochs: int):
         """ Train the model using the dataset passed in at model creation """
         with self.graph.as_default():
-            self.dataset = self.dataset.shuffle(batch_size * 16)
+            self.dataset = self.dataset.shuffle(batch_size * 128)
             self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(batch_size * 2)
+            self.dataset = self.dataset.prefetch(16)
+            # self.dataset = self.dataset.apply(
+            #     tf.contrib.data.copy_to_device("/gpu:0")).prefetch(1)
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
@@ -273,7 +278,8 @@ class PoseModel3d:
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
-                train = optimizer.minimize(total_loss, global_step=self.step,
+                train = optimizer.minimize(total_loss * config.total_loss_scale, 
+                                           global_step=self.step,
                                            var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
 
@@ -299,6 +305,7 @@ class PoseModel3d:
                             _, summary_eval = self.sess.run(
                                 (train, summary), feed_dict=feed)
                         self.summary_writer.add_summary(summary_eval, gs)
+                        # self.beholder.update(session=self.sess)
                     except tf.errors.OutOfRangeError:
                         break
                     print("{:7}".format(gs), end=' ', flush=True)

@@ -18,7 +18,8 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
             tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
                              [tf.float32, tf.float32, tf.float32,
                               tf.float32, tf.float32]))),
-        cycle_length=4, block_length=1, sloppy=True))
+        cycle_length=6, block_length=1, sloppy=True,
+        buffer_output_elements=32, prefetch_input_elements=6))
 
     return dataset
 
@@ -132,7 +133,7 @@ def suppress_non_largest_human(humans, heatmaps, expected_in_size):
             max_y = max(center[1], max_y)
             min_y = min(center[1], min_y)
         human_extents.append((min_x, max_x, min_y, max_y))
-        one_largest_range = max(max_x - min_x, max_y - min_y)
+        one_largest_range = (max_x - min_x) * (max_y - min_y)
         if one_largest_range > largest_human_size:
             largest_human_size = one_largest_range
             largest_human_idx = h_idx

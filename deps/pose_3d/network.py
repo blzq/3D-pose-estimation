@@ -9,14 +9,12 @@ from tf_pose.common import CocoPart
 def build_model(inputs, inputs_locs, training: bool):
     with tf.variable_scope('encoder'):
         with tf.variable_scope('init_conv'):
-            tf.summary.histogram('input_heatmaps', inputs[:, :, :, :19])
-            tf.summary.histogram('input_frames', inputs[:, :, :, 19:])
             in_channels = inputs.get_shape().as_list()[-1]
             in_1x1 = tf.layers.conv2d(inputs, in_channels, [1, 1])
             in_bn = tf.layers.batch_normalization(in_1x1, training=training)
             in_relu = tf.nn.relu(in_bn)
 
-            init_conv1 = tf.layers.conv2d(in_relu, 32, [3, 3], 1)
+            init_conv1 = tf.layers.conv2d(in_relu, in_channels, [3, 3])
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
             conv_relu1 = tf.nn.relu(bn1)
 
@@ -29,35 +27,39 @@ def build_model(inputs, inputs_locs, training: bool):
             in_concat = tf.concat([features_flat, locations_flat], axis=1)
 
             init_linear = tf.layers.dense(in_concat, 1024)
-            init_bn = tf.layers.batch_normalization(init_linear, training=training)
-            linear_relu = tf.nn.relu(init_bn)
 
         with tf.variable_scope('bilinear_blocks'):
-            bl1 = _bilinear_residual_block(linear_relu, 1024, training)
-            bl2 = _bilinear_residual_block(bl1, 1024, training)
-            bl3 = _bilinear_residual_block(bl2, 1024, training)
+            bl1 = _bilinear_res_block(init_linear, 1024, training, in_act=False)
+            bl2 = _bilinear_res_block(bl1, 1024, training)
+            bl3 = _bilinear_res_block(bl2, 1024, training)
+            bl_end = tf.layers.dense(bl3, 1024)
+            bl_bn = tf.layers.batch_normalization(bl_end, training=training)
+            bl_relu = tf.nn.relu(bl_bn)
 
         with tf.variable_scope('out_fc'):
-            out = tf.layers.dense(bl3, 79) # 24*3 rotations + 7 camera params
+            out = tf.layers.dense(bl_relu, 79) # 24*3 rotations + 7 cam params
 
         tf.summary.histogram('out_pose', out[:, :72])
 
     return out
 
 
-def _bilinear_residual_block(inputs, units, training: bool):
-    linear1 = tf.layers.dense(inputs, units)
+def _bilinear_res_block(inputs, units, training: bool, in_act=True):
+    if in_act:
+        in_bn = tf.layers.batch_normalization(inputs, training=training)
+        in_relu = tf.nn.relu(in_bn)
+        linear_in = tf.layers.dropout(in_relu, 0.2, training=training)
+    else:
+        linear_in = inputs
+    linear1 = tf.layers.dense(linear_in, units)
     bn1 = tf.layers.batch_normalization(linear1, training=training)
     relu1 = tf.nn.relu(bn1)
-    dropout1 = tf.layers.dropout(relu1, 0.3, training=training)
+    dropout1 = tf.layers.dropout(relu1, 0.2, training=training)
 
-    linear2 = tf.layers.dense(dropout1, units)
-    bn2 = tf.layers.batch_normalization(linear2, training=training)
-    dropout2 = tf.layers.dropout(bn2, 0.3, training=training)
+    linear2 = tf.layers.dense(dropout1, 1024)
 
-    add = tf.add(inputs, dropout2)
-    relu2 = tf.nn.relu(add)
-    return relu2
+    add = tf.add(inputs, linear2)
+    return add
 
 
 def _mobilenetv2(inputs, training: bool, alpha=1.4):
