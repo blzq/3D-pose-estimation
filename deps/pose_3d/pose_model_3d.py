@@ -246,7 +246,7 @@ class PoseModel3d:
         with self.graph.as_default():
             self.dataset = self.dataset.shuffle(batch_size * 128)
             self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(16)
+            self.dataset = self.dataset.prefetch(24)
             # self.dataset = self.dataset.apply(
             #     tf.contrib.data.copy_to_device("/gpu:0")).prefetch(1)
             iterator = self.dataset.make_initializable_iterator()
@@ -278,7 +278,7 @@ class PoseModel3d:
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
-                train = optimizer.minimize(total_loss * config.total_loss_scale, 
+                train = optimizer.minimize(total_loss * config.total_loss_scale,
                                            global_step=self.step,
                                            var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))

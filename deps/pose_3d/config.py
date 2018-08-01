@@ -2,7 +2,7 @@
 
 from math import pi
 
-total_loss_scale = 10.0
+total_loss_scale = 1.0
 pose_loss_scale = 1.0
 pose_loss_direct_scale = 1.0
 mesh_loss_scale = 1.0

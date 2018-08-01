@@ -39,20 +39,20 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     shapes = np.transpose(info_dict['shape'], (1, 0))
     joints2d = np.transpose(info_dict['joints2D'], (2, 1, 0))
     # Flip 2D GT horizontally because image and 3D GT are flipped in SURREAL
-    joints2d = img_size_x - joints2d
+    joints2d[:, :, 0] = img_size_x - joints2d[:, :, 0]
 
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
     frames = [ cv2.normalize(frame, None, 0, 1, cv2.NORM_MINMAX)
                for frame in frames ]
-    # Flip image horizontally because image and 3D GT are flipped in SURREAL
-    frames = np.flip(frames, axis=2)
     # frames = [ cv2.resize(frame,
     #                       dsize=(heatmaps.shape[2], heatmaps.shape[1]),
     #                       interpolation=cv2.INTER_AREA)
     #            for frame in frames ]
     frames = np.array(frames, dtype=np.float32)
         # shape: time, 240, 320
+    # Flip image horizontally because image and 3D GT are flipped in SURREAL
+    frames = np.flip(frames, axis=2)
 
     min_length = np.min([frames.shape[0], poses.shape[0], heatmaps.shape[0]])
     heatmaps = heatmaps[:min_length]
@@ -92,12 +92,12 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = locations.astype(np.float32)
     # Normalize detection locations by image size
     # Move centre of image to (0, 0)
-    img_dim = hs[1:3]
+    img_dim = np.array(hs[1:3], dtype=np.float32)
+    img_side_length = np.minimum(img_dim[0], img_dim[1])
+    np.divide(img_dim, 2, out=img_dim)
     np.subtract(locations, img_dim, out=locations)
     # Scale detection locations by shorter side length
-    img_side_length = np.amin(img_dim)
     np.divide(locations, img_side_length, out=locations)
-
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost
@@ -112,6 +112,7 @@ def heatmaps_to_locations(heatmaps_image_stack):
     # locations = locations / maxs
 
     return locations_with_vals
+
 
 def suppress_non_largest_human(humans, heatmaps, expected_in_size):
     d = 8  # padding around other humans to suppress

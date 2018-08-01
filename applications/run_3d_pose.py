@@ -24,6 +24,7 @@ from tf_smpl.batch_smpl import SMPL
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
+
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
     in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
@@ -56,9 +57,6 @@ def main():
                                  resize_to_default=True, upsample_size=8.0)
     heatmaps = suppress_non_largest_human(humans, estimator.heatMat,
                                           expect_sz)
-    print(heatmaps.shape)
-    plt.imshow(np.sum(heatmaps, axis=2))
-    plt.show()
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
@@ -104,6 +102,9 @@ def main():
             fp.write('f %d %d %d\n' % (f[0], f[1], f[2]))
 
     op_out_im = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
+    plt.subplot(121)
+    plt.imshow(np.sum(heatmaps[0], axis=2))
+    plt.subplot(122)
     plt.imshow(op_out_im)
     plt.show()
 
