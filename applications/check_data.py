@@ -61,13 +61,15 @@ if __name__ == '__main__':
         frames_paths.extend(one_dir_frames_paths)
 
     dataset = map(read_joints, info_files)
-    for value in dataset:
+    for maps_file, info_file in zip(maps_files, info_files):
         try:
             if CHECK_HEATMAPS:
+                value = read_maps(maps_file)
                 shape = value[0].shape
                 filename = value[1]
                 assert shape[1] == 240
             if CHECK_JOINTS:
+                value = read_joints(info_file)
                 shape = value[0].shape
                 info_filename = value[1]
                 filename = info_filename[:-9] + '_maps.mat'

@@ -29,13 +29,14 @@ def main():
     for i in range(estimator.heatMat.shape[2]):
         fig.add_subplot(estimator.heatMat.shape[2] // 5 + 1, 5, i+1)
         plt.imshow(estimator.heatMat[:, :, i])
+    fig.add_subplot(estimator.heatMat.shape[2] // 5 + 1, 5, 20)
+    plt.imshow(np.sum(estimator.heatMat, axis=2))
     plt.show()
     fig = plt.figure()
     for i in range(estimator.pafMat.shape[2]):
         fig.add_subplot(estimator.pafMat.shape[2] // 6 + 1, 6, i+1)
         plt.imshow(estimator.pafMat[:, :, i])
     plt.show()
-    return
 
 
 if __name__ == '__main__':

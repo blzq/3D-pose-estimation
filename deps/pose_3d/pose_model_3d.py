@@ -1,9 +1,9 @@
 import os.path
 
 import tensorflow as tf
+from tensorflow import keras
 import numpy as np
 from tensorboard.plugins.beholder import Beholder
-from tensorflow.contrib.data.python.ops import prefetching_ops
 
 from .network import build_model, build_discriminator
 from . import config
@@ -29,6 +29,8 @@ class PoseModel3d:
             tfconfig = tf.ConfigProto()
             tfconfig.gpu_options.allow_growth = True  # pylint: disable=no-member
             self.sess = tf.Session(config=tfconfig)
+            # allow using Keras layers in network
+            keras.backend.set_session(self.sess)
 
             shorter_side = min(input_shape[1], input_shape[2])
             self.img_side_len = shorter_side
@@ -196,8 +198,8 @@ class PoseModel3d:
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.huber_loss(
                     labels=tf.reshape(smpl_joints2d, [-1, 2]),
-                    predictions=out_2d,
-                    delta=16.0, weights=config.reproj_loss_scale)
+                    predictions=out_2d, delta=self.img_side_len/15,
+                    weights=config.reproj_loss_scale)
                 tf.summary.scalar('reproj_loss', reproj_loss, family='losses')
                 total_loss += reproj_loss
                 with tf.variable_scope("projection"):
@@ -210,8 +212,8 @@ class PoseModel3d:
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 cam_loss = tf.losses.huber_loss(
                     labels=tf.reshape(smpl_joints2d, [-1, 2]),
-                    predictions=out_2d_gt_pose,
-                    delta=16.0, weights=config.cam_loss_scale)
+                    predictions=out_2d_gt_pose, delta=self.img_side_len/15,
+                    weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 total_loss += cam_loss
 
@@ -244,9 +246,9 @@ class PoseModel3d:
     def train(self, batch_size: int, epochs: int):
         """ Train the model using the dataset passed in at model creation """
         with self.graph.as_default():
-            self.dataset = self.dataset.shuffle(batch_size * 128)
+            self.dataset = self.dataset.shuffle(batch_size * 64)
             self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(24)
+            self.dataset = self.dataset.prefetch(20)
             # self.dataset = self.dataset.apply(
             #     tf.contrib.data.copy_to_device("/gpu:0")).prefetch(1)
             iterator = self.dataset.make_initializable_iterator()

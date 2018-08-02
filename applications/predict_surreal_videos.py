@@ -69,7 +69,7 @@ def process_video(in_file, out_dir, estimator):
     out_dict['detected_2D'] = np.stack(humans, axis=-1)
     out_dict['visibility_2D'] = np.stack(visibilities, axis=-1)
     out_dict['heat_mat'] = np.stack(heat_mats, axis=-1)
-    out_dict['paf_mat'] = np.stack(paf_mats, axis=-1)
+    # out_dict['paf_mat'] = np.stack(paf_mats, axis=-1)
 
     out_mat_filename = \
         os.path.splitext(os.path.basename(in_file))[0] + '_maps'

@@ -27,7 +27,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     expect_sz = config.input_img_size
     expect_aspect = expect_sz[1] / expect_sz[0]
@@ -103,7 +103,8 @@ def main():
 
     op_out_im = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
     plt.subplot(121)
-    plt.imshow(np.sum(heatmaps[0], axis=2))
+    plt.imshow(np.sum(heatmaps[0][:, :, :config.n_joints], axis=2), 
+               cmap='gray')
     plt.subplot(122)
     plt.imshow(op_out_im)
     plt.show()

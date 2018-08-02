@@ -19,7 +19,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
                              [tf.float32, tf.float32, tf.float32,
                               tf.float32, tf.float32]))),
         cycle_length=6, block_length=1, sloppy=True,
-        buffer_output_elements=32, prefetch_input_elements=6))
+        buffer_output_elements=64, prefetch_input_elements=6))
 
     return dataset
 

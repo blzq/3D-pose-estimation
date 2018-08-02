@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import tensorflow as tf
+from tensorflow import keras
+
 from tf_perspective_projection.project import rodrigues_batch
 from tf_pose.common import CocoPart
 
@@ -10,29 +12,28 @@ def build_model(inputs, inputs_locs, training: bool):
     with tf.variable_scope('encoder'):
         with tf.variable_scope('init_conv'):
             in_channels = inputs.get_shape().as_list()[-1]
-            in_1x1 = tf.layers.conv2d(inputs, in_channels, [1, 1])
-            in_bn = tf.layers.batch_normalization(in_1x1, training=training)
-            in_relu = tf.nn.relu(in_bn)
 
-            init_conv1 = tf.layers.conv2d(in_relu, in_channels, [3, 3])
+            init_conv1 = tf.layers.conv2d(inputs, in_channels, [3, 3])
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
             conv_relu1 = tf.nn.relu(bn1)
 
         with tf.variable_scope('mobilenetv2'):
-            mn = _mobilenetv2(conv_relu1, training, alpha=1.0)
+            mn = _mobilenetv2(conv_relu1, training, alpha=1.4)
 
         with tf.variable_scope('init_dense'):
             features_flat = tf.layers.flatten(mn)
             locations_flat = tf.layers.flatten(inputs_locs)
             in_concat = tf.concat([features_flat, locations_flat], axis=1)
 
-            init_linear = tf.layers.dense(in_concat, 1024)
+            l_units = in_concat.get_shape().as_list()[1]
+            init_l = tf.layers.dense(in_concat, l_units)
 
         with tf.variable_scope('bilinear_blocks'):
-            bl1 = _bilinear_res_block(init_linear, 1024, training, in_act=False)
-            bl2 = _bilinear_res_block(bl1, 1024, training)
-            bl3 = _bilinear_res_block(bl2, 1024, training)
-            bl_end = tf.layers.dense(bl3, 1024)
+            bl1 = _bilinear_res_block(init_l, l_units, training, in_act=False)
+            bl2 = _bilinear_res_block(bl1, l_units, training)
+            bl3 = _bilinear_res_block(bl2, l_units, training)
+            bl4 = _bilinear_res_block(bl3, l_units, training)
+            bl_end = tf.layers.dense(bl4, l_units)
             bl_bn = tf.layers.batch_normalization(bl_end, training=training)
             bl_relu = tf.nn.relu(bl_bn)
 
@@ -48,15 +49,15 @@ def _bilinear_res_block(inputs, units, training: bool, in_act=True):
     if in_act:
         in_bn = tf.layers.batch_normalization(inputs, training=training)
         in_relu = tf.nn.relu(in_bn)
-        linear_in = tf.layers.dropout(in_relu, 0.2, training=training)
+        linear_in = tf.layers.dropout(in_relu, 0.4, training=training)
     else:
         linear_in = inputs
     linear1 = tf.layers.dense(linear_in, units)
     bn1 = tf.layers.batch_normalization(linear1, training=training)
     relu1 = tf.nn.relu(bn1)
-    dropout1 = tf.layers.dropout(relu1, 0.2, training=training)
+    dropout1 = tf.layers.dropout(relu1, 0.4, training=training)
 
-    linear2 = tf.layers.dense(dropout1, 1024)
+    linear2 = tf.layers.dense(dropout1, units)
 
     add = tf.add(inputs, linear2)
     return add
@@ -113,11 +114,12 @@ def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int,
     else:
         ex_out = inputs
 
-    d_channels = ex_out.get_shape().as_list()[-1]
     # This layer contains an extra pointwise 1x1 conv compared to MobileNetv2
-    # Switch to Keras DepthwiseConv2d?
-    depthwise = tf.layers.separable_conv2d(ex_out, d_channels, [3, 3], stride,
-                                           padding='same')
+    # d_chans = ex_out.get_shape().as_list()[-1]
+    # depthwise = tf.layers.separable_conv2d(ex_out, d_chans, [3, 3], stride,
+    #                                        padding='same')
+    depthwise = keras.layers.DepthwiseConv2D([3, 3], stride,
+                                             padding='same')(ex_out)
     dw_bn = tf.layers.batch_normalization(depthwise, training=training)
     dw_relu = tf.nn.relu6(dw_bn)
     pointwise = tf.layers.conv2d(dw_relu, pointwise_conv_filters, [1, 1])
