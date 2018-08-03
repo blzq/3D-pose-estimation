@@ -21,7 +21,7 @@ def main(surreal_path):
     estimator = OpPoseEstimator(get_graph_path('cmu'),
                                 target_size=(320, 240), tf_config=config)
     base_path = os.path.join(surreal_path, 'data', 'cmu', 'train')
-    for run in ['run0', 'run1', 'run2']:
+    for run in ['run0']:  # + ['run1', 'run2']:
         run_path = os.path.join(base_path, run)
         dir_names = sorted(os.listdir(run_path))
         for dir_name in dir_names:

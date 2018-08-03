@@ -29,7 +29,7 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames: 
+    for basename in basenames[:basenames.index('54_17')]: 
         # each basename is one dir corresponding to one type of action
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = glob.glob(
@@ -44,17 +44,17 @@ if __name__ == '__main__':
         frames_paths.extend(one_dir_frames_paths)
 
     # Shuffle file order
-    all_files = list(zip(maps_files, info_files, frames_paths))
-    random.shuffle(all_files)
-    maps_files, info_files, frames_paths = zip(*all_files)
-    maps_files, info_files, frames_paths = (
-        list(maps_files), list(info_files), list(frames_paths))
+    # all_files = list(zip(maps_files, info_files, frames_paths))
+    # random.shuffle(all_files)
+    # maps_files, info_files, frames_paths = zip(*all_files)
+    # maps_files, info_files, frames_paths = (
+    #     list(maps_files), list(info_files), list(frames_paths))
 
     graph = tf.Graph()
     with graph.as_default():
         dataset = dataset_from_filenames(maps_files, info_files, frames_paths)
 
-    pm_3d = PoseModel3d((None, 240, 320, 22),
+    pm_3d = PoseModel3d((None, 240, 320, 21),
                         graph,
                         mode='train',
                         dataset=dataset,

@@ -19,7 +19,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
                              [tf.float32, tf.float32, tf.float32,
                               tf.float32, tf.float32]))),
         cycle_length=6, block_length=1, sloppy=True,
-        buffer_output_elements=64, prefetch_input_elements=6))
+        buffer_output_elements=32, prefetch_input_elements=4))
 
     return dataset
 
@@ -27,7 +27,8 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
 def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
-        # to shape: time, height, width, n_joints = 19
+    heatmaps = heatmaps[:, :, :, :config.n_joints]
+        # to shape: time, height, width, n_joints = 18
     # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
     heatmaps = np.flip(heatmaps, axis=2)
     img_size_x = heatmaps.shape[2]

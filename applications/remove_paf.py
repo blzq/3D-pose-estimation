@@ -15,7 +15,7 @@ DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
-START_NAME = '01_01'  # Modify with name to start at
+START_NAME = '137_14'  # Modify with name to start at
 
 
 def remove_paf_from_maps(maps_file):

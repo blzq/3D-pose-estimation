@@ -8,6 +8,8 @@ import subprocess
 
 
 if __name__ == '__main__':
+    if len(sys.argv != 2):
+        print("Usage: python3 convert_video_to_images.py <path-to-SURREAL-dataset>")
     DATA_PATH = sys.argv[1]
     dataset_dir = os.path.realpath(DATA_PATH)
     basenames = sorted(os.listdir(dataset_dir))

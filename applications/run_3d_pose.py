@@ -27,7 +27,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'train_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     expect_sz = config.input_img_size
     expect_aspect = expect_sz[1] / expect_sz[0]
@@ -55,7 +55,8 @@ def main():
                                     tf_config=tfconfig)
     humans = estimator.inference(in_im,
                                  resize_to_default=True, upsample_size=8.0)
-    heatmaps = suppress_non_largest_human(humans, estimator.heatMat,
+    heatmaps = estimator.heatMat[:, :, :config.n_joints]
+    heatmaps = suppress_non_largest_human(humans, heatmaps,
                                           expect_sz)
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
@@ -66,7 +67,7 @@ def main():
     # with different graph so checkpoint is restored correctly
     pm_graph = tf.Graph()
 
-    pm_3d = PoseModel3d((None, 240, 320, 22),
+    pm_3d = PoseModel3d((None, 240, 320, 21),
                         pm_graph,
                         mode='test',
                         summary_dir=SUMMARY_DIR,

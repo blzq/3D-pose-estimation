@@ -7,6 +7,7 @@ from tensorboard.plugins.beholder import Beholder
 
 from .network import build_model, build_discriminator
 from . import config
+# from . import utils
 from tf_smpl.batch_smpl import SMPL
 from tf_perspective_projection.project import rodrigues_batch, project
 
@@ -135,7 +136,8 @@ class PoseModel3d:
             self.summary_writer.add_summary(summary_val)
         return out
 
-    def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d):
+    def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d, 
+                           batch_size):
         with self.graph.as_default():
             with tf.variable_scope("rodrigues"):
                 out_mat = rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
@@ -151,7 +153,7 @@ class PoseModel3d:
                 weights=config.pose_loss_scale)
             tf.summary.scalar('pose_loss', pose_loss, family='losses')
 
-            out_pose_norm = tf.norm(tf.reshape(out_pose, [-1, 24, 3]), axis=2)
+            out_pose_norm = tf.norm(tf.reshape(out_pose, [-1, 3]), axis=1)
             out_pose_norm_zeros = tf.zeros(tf.shape(out_pose_norm))
             greater_mask = tf.greater(out_pose_norm, config.reg_joint_limit)
             out_pose_too_large = tf.where(
@@ -258,7 +260,7 @@ class PoseModel3d:
             out_pose = self.outputs[:, :72]
 
             total_loss = self.get_encoder_losses(
-                out_pose, gt_pose, betas, smpl_joints2d)
+                out_pose, gt_pose, betas, smpl_joints2d, batch_size)
 
             if self.discriminator:
                 disc_total_loss, disc_enc_loss = self.get_discriminator_loss(

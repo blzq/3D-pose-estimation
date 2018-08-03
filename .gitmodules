@@ -7,3 +7,6 @@
 [submodule "deps/tf_perspective_projection"]
 	path = deps/tf_perspective_projection
 	url = https://github.com/blzq/tf_perspective_projection
+[submodule "deps/tf_mesh_renderer"]
+	path = deps/tf_mesh_renderer
+	url = https://github.com/blzq/tf_mesh_renderer
