@@ -7,7 +7,7 @@ from tensorboard.plugins.beholder import Beholder
 
 from .network import build_model, build_discriminator
 from . import config
-# from . import utils
+from . import utils
 from tf_smpl.batch_smpl import SMPL
 from tf_perspective_projection.project import rodrigues_batch, project
 
@@ -136,8 +136,7 @@ class PoseModel3d:
             self.summary_writer.add_summary(summary_val)
         return out
 
-    def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d, 
-                           batch_size):
+    def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d):
         with self.graph.as_default():
             with tf.variable_scope("rodrigues"):
                 out_mat = rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
@@ -218,6 +217,11 @@ class PoseModel3d:
                     weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 total_loss += cam_loss
+                
+                render = utils.render_mesh_verts_cam(
+                    gt_meshes, self.outputs[:, 72:75],
+                    self.outputs[:, 75:78], self.outputs[:, 78] * 50)
+                tf.summary.image('silhouettes', render, max_outputs=1)
 
             return total_loss
 
@@ -260,7 +264,7 @@ class PoseModel3d:
             out_pose = self.outputs[:, :72]
 
             total_loss = self.get_encoder_losses(
-                out_pose, gt_pose, betas, smpl_joints2d, batch_size)
+                out_pose, gt_pose, betas, smpl_joints2d)
 
             if self.discriminator:
                 disc_total_loss, disc_enc_loss = self.get_discriminator_loss(
@@ -282,9 +286,9 @@ class PoseModel3d:
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
-                train = optimizer.minimize(total_loss * config.total_loss_scale,
-                                           global_step=self.step,
-                                           var_list=encoder_vars)
+                train = optimizer.minimize(
+                    total_loss * config.total_loss_scale,
+                    global_step=self.step, var_list=encoder_vars)
             self.sess.run(tf.variables_initializer(optimizer.variables()))
 
             if self.saver is None:

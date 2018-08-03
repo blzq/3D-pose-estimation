@@ -10,15 +10,13 @@ import tf_smpl
 from tf_perspective_projection import project
 
 
-def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, batch_size):
+def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f):
     faces_path = pkg_resources.resource_filename(
         tf_smpl.__name__, 'smpl_faces.npy')
     faces = np.load(faces_path)
     faces = tf.constant(faces, dtype=tf.int32)
 
-    # verts.set_shape([batch_size, 6890, 3])
     batch_size = tf.shape(verts)[0]
-    # print(batch_size)
 
     # Calculate this properly for real colour
     normals = tf.zeros_like(verts)
@@ -49,7 +47,7 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, batch_size):
         specular_colors=None, shininess_coefficients=None, ambient_color=None,
         fov_y=cam_f, near_clip=0.01, far_clip=10.0)
     
-    return rendered[:, :, :, :3]
+    return rendered[:, :, :, 3, tf.newaxis]
 
     
 

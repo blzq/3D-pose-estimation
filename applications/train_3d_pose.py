@@ -29,7 +29,7 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames[:basenames.index('54_17')]: 
+    for basename in basenames[:basenames.index('62_22')]: 
         # each basename is one dir corresponding to one type of action
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = glob.glob(
