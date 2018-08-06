@@ -1,4 +1,5 @@
 import os.path
+import pkg_resources
 
 import tensorflow as tf
 from tensorflow import keras
@@ -8,7 +9,7 @@ from tensorboard.plugins.beholder import Beholder
 from .network import build_model, build_discriminator
 from . import config
 from . import utils
-from tf_smpl.batch_smpl import SMPL
+import tf_smpl
 from tf_perspective_projection.project import rodrigues_batch, project
 
 
@@ -27,9 +28,9 @@ class PoseModel3d:
                  discriminator=False):
         self.graph = graph if graph != None else tf.get_default_graph()
         with self.graph.as_default():
-            tfconfig = tf.ConfigProto()
-            tfconfig.gpu_options.allow_growth = True  # pylint: disable=no-member
-            self.sess = tf.Session(config=tfconfig)
+            tfconf = tf.ConfigProto()
+            tfconf.gpu_options.allow_growth = True  # pylint: disable=no-member
+            self.sess = tf.Session(config=tfconf)
             # allow using Keras layers in network
             keras.backend.set_session(self.sess)
 
@@ -56,7 +57,11 @@ class PoseModel3d:
                 self.mesh_loss = mesh_loss
                 self.reproject_loss = reproject_loss
                 if self.mesh_loss or self.reproject_loss:
-                    self.smpl = SMPL(smpl_model)
+                    self.smpl = tf_smpl.batch_smpl.SMPL(smpl_model)
+                    faces_path = pkg_resources.resource_filename(
+                        tf_smpl.__name__, 'smpl_faces.npy')
+                    self.mesh_faces = tf.constant(np.load(faces_path),
+                                                  dtype=tf.int32)
                 if self.discriminator:
                     if training:
                         d_in = tf.concat(
@@ -165,7 +170,11 @@ class PoseModel3d:
             total_loss = pose_loss + reg_loss  # + pose_loss_direct
 
             if self.mesh_loss or self.reproject_loss:
-                out_meshes, _, _ = self.smpl(betas, out_pose, get_skin=True)
+                # TODO: 3D mesh loss uses ground truth global rotation
+                out_pose_gt_global = tf.concat(
+                    [gt_pose[:, :3], out_pose[:, 3:]], axis=1)
+                out_meshes, _, _ = self.smpl(betas, out_pose_gt_global,
+                                             get_skin=True)
                 out_joints = self.smpl.J_transformed
                 gt_meshes, _, _ = self.smpl(betas, gt_pose, get_skin=True)
                 gt_joints = self.smpl.J_transformed
@@ -217,11 +226,20 @@ class PoseModel3d:
                     weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 total_loss += cam_loss
-                
-                render = utils.render_mesh_verts_cam(
-                    gt_meshes, self.outputs[:, 72:75],
-                    self.outputs[:, 75:78], self.outputs[:, 78] * 50)
+
+                with tf.variable_scope("render"):
+                    render = utils.render_mesh_verts_cam(
+                        gt_meshes,
+                        self.outputs[:, 72:75], self.outputs[:, 75:78],
+                        tf.atan(1.0 / self.outputs[:, 78]), self.mesh_faces)
+                    # lights = tf.constant([[-2., 0., 0.], [0., -2., 0.],
+                    #                       [0., 0., -2.], [-1., -1., -1.]])
+                    render_outs = utils.render_mesh_verts_cam(
+                        out_meshes, tf.constant([0.0, 0.0, -3.5]),
+                        tf.constant([0., 0., 0.]), 40.0, self.mesh_faces,
+                        lights=None)
                 tf.summary.image('silhouettes', render, max_outputs=1)
+                tf.summary.image('output_meshes', render_outs, max_outputs=1)
 
             return total_loss
 
@@ -261,6 +279,7 @@ class PoseModel3d:
             train_handle = self.sess.run(iterator.string_handle())
 
             _, _, gt_pose, betas, smpl_joints2d = self.next_input
+            gt_pose = utils.rotate_global_pose(gt_pose)
             out_pose = self.outputs[:, :72]
 
             total_loss = self.get_encoder_losses(

@@ -63,7 +63,7 @@ def main():
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
     inputs = np.concatenate([heatmaps, in_im_3d[np.newaxis]], axis=3)
     input_locs = heatmaps_to_locations(heatmaps)
-    input_locs = tf.reshape(input_locs, [1, config.n_joints, 3])
+    input_locs = np.reshape(input_locs, [1, config.n_joints, 3])
 
     # with different graph so checkpoint is restored correctly
     pm_graph = tf.Graph()
