@@ -13,6 +13,7 @@ def build_model(inputs, inputs_locs, training: bool):
         with tf.variable_scope('init_conv'):
             in_channels = inputs.get_shape().as_list()[-1]
 
+            inputs = tf.check_numerics(inputs, "in_heatmaps_not_finite")
             init_conv1 = tf.layers.conv2d(inputs, in_channels, [3, 3])
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
             conv_relu1 = tf.nn.relu(bn1)
@@ -21,6 +22,7 @@ def build_model(inputs, inputs_locs, training: bool):
             mn = _mobilenetv2(conv_relu1, training, alpha=1.4)
 
         with tf.variable_scope('init_dense'):
+            inputs_locs = tf.check_numerics(inputs_locs, "in_locs_not_finite")
             features_flat = tf.layers.flatten(mn)
             locations_flat = tf.layers.flatten(inputs_locs)
             in_concat = tf.concat([features_flat, locations_flat], axis=1)
@@ -39,8 +41,8 @@ def build_model(inputs, inputs_locs, training: bool):
 
         with tf.variable_scope('out_fc'):
             out = tf.layers.dense(bl_relu, 79) # 24*3 rotations + 7 cam params
-
-        tf.summary.histogram('out_pose', out[:, :72])
+            
+        # tf.summary.histogram('out_pose', out[:, :72])
 
     return out
 

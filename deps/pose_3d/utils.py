@@ -63,29 +63,62 @@ def rotate_global_pose(thetas):
     # is aligned with the z axis. Make it so the person's vertical is aligned
     # with the y axis.
     batch_size = tf.shape(thetas)[0]
-    global_rot = thetas[:, :3]
-    global_rot_mat = project.rodrigues_batch(global_rot)
-    # turn_x = np.array([[1.0,  0.0, 0.0],
-    #                    [0.0,  0.0, 1.0],
-    #                    [0.0, -1.0, 0.0]])
+
+    turn_x = tf.constant([np.pi / 2, 0.0, 0.0])
+    turn_x_batch = tf.reshape(tf.tile(turn_x, [batch_size]), [batch_size, 3])
+
+    global_rot_vec = add_axis_angle_rotations(turn_x_batch, thetas[:, :3])
+
+    # global_rot = thetas[:, :3]
+    # global_rot_mat = project.rodrigues_batch(global_rot)
+    # turn_x = tf.constant([[1.0,  0.0, 0.0],
+    #                       [0.0,  0.0, 1.0],
+    #                       [0.0, -1.0, 0.0]])
     # turn_y = tf.constant([[0.0, 0.0, -1.0],
     #                       [0.0, 1.0,  0.0],
     #                       [1.0, 0.0,  0.0]])
-    turn_b = tf.constant([[0.0, 1.0, 0.0],
-                          [0.0, 0.0, 1.0],
-                          [1.0, 0.0, 0.0]])
-    turn_b = tf.reshape(tf.tile(turn_b, [batch_size, 1]), [batch_size, 3, 3])
-    global_rot_mat = tf.matmul(turn_b, global_rot_mat)
+    # turn_both = tf.constant([[0.0, 1.0, 0.0],
+    #                       [0.0, 0.0, 1.0],
+    #                       [1.0, 0.0, 0.0]])
+    # turn_b = tf.reshape(tf.tile(turn_b, [batch_size, 1]), [batch_size, 3, 3])
+    # global_rot_mat = tf.matmul(turn_b, global_rot_mat)
 
+    # Rotation matrix to axis-angle
     # https://en.wikipedia.org/wiki/Rotation_matrix#Determining_the_axis
-    global_rv_1 = global_rot_mat[:, 2, 1] - global_rot_mat[:, 1, 2]
-    global_rv_2 = global_rot_mat[:, 0, 2] - global_rot_mat[:, 2, 0]
-    global_rv_3 = global_rot_mat[:, 1, 0] - global_rot_mat[:, 0, 1]
+    # Note the case where rotation angle = pi (R = Rt) is treated as angle = 0
+    # global_rv_1 = global_rot_mat[:, 2, 1] - global_rot_mat[:, 1, 2]
+    # global_rv_2 = global_rot_mat[:, 0, 2] - global_rot_mat[:, 2, 0]
+    # global_rv_3 = global_rot_mat[:, 1, 0] - global_rot_mat[:, 0, 1]
+    # global_rot_vec = tf.stack([global_rv_1, global_rv_2, global_rv_3], axis=1)
+    # global_rot_vec_norm = tf.norm(global_rot_vec, axis=1, keepdims=True)
+    # is_zero = tf.equal(tf.squeeze(global_rot_vec_norm), 0.0)
+    # global_rot_vec = global_rot_vec / global_rot_vec_norm
+    # global_rot_vec = tf.where(is_zero,
+    #                           tf.zeros_like(global_rot_vec), global_rot_vec)
 
-    global_rot_vec = tf.stack([global_rv_1, global_rv_2, global_rv_3], axis=1)
-    global_rot_vec = tf.nn.l2_normalize(global_rot_vec, axis=1)
-    global_rot_vec = global_rot_vec * tf.acos(
-        (tf.trace(global_rot_mat) - 1) / 2)[:, tf.newaxis]
+    # global_rot_vec = global_rot_vec * tf.asin(global_rot_vec_norm / 2)
+
     thetas = tf.concat([global_rot_vec, thetas[:, 3:]], axis=1)
-
     return thetas
+
+
+def add_axis_angle_rotations(rv1, rv2):
+    # given angle*axis rotation vectors a*l and b*m, result angle*axis: c*n
+    # cos(c/2) = cos(a/2)cos(b/2) - sin(a/2)sin(b/2) (l . m)
+    # sin(c/2) (n) = 
+    #   sin(a/2)cos(b/2) (l) + cos(a/2)sin(b/2) (m) + sin(a/2)sin(b/2) (l x m)
+    a = tf.norm(rv1, axis=1)
+    b = tf.norm(rv2, axis=1)
+
+    l = tf.nn.l2_normalize(rv1)
+    m = tf.nn.l2_normalize(rv2)
+
+    cos_half_c = tf.cos(a/2) * tf.cos(b/2) - (
+        tf.sin(a/2) * tf.sin(b/2) * tf.matmul(l, m, transpose_b=True))
+    sin_half_c_n = tf.sin(a/2) * tf.cos(b/2) * l + (
+        tf.cos(a/2) * tf.sin(b/2) * m + 
+        tf.sin(a/2) * tf.sin(b/2) * tf.cross(l, m))
+
+    half_c = tf.acos(cos_half_c)
+    n = sin_half_c_n / tf.sin(half_c)
+    return n * half_c * 2

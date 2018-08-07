@@ -3,8 +3,8 @@ import pkg_resources
 
 import tensorflow as tf
 from tensorflow import keras
-import numpy as np
 from tensorboard.plugins.beholder import Beholder
+import numpy as np
 
 from .network import build_model, build_discriminator
 from . import config
@@ -159,15 +159,15 @@ class PoseModel3d:
 
             out_pose_norm = tf.norm(tf.reshape(out_pose, [-1, 3]), axis=1)
             out_pose_norm_zeros = tf.zeros(tf.shape(out_pose_norm))
-            greater_mask = tf.greater(out_pose_norm, config.reg_joint_limit)
             out_pose_too_large = tf.where(
-                greater_mask, out_pose_norm, out_pose_norm_zeros)
+                tf.greater(out_pose_norm, config.reg_joint_limit),
+                out_pose_norm, out_pose_norm_zeros)
             reg_loss = tf.losses.mean_squared_error(
                 labels=out_pose_norm_zeros, predictions=out_pose_too_large,
                 weights=config.reg_loss_scale)
             tf.summary.scalar('reg_loss', reg_loss, family='losses')
 
-            total_loss = pose_loss + reg_loss  # + pose_loss_direct
+            total_loss = pose_loss + reg_loss
 
             if self.mesh_loss or self.reproject_loss:
                 # TODO: 3D mesh loss uses ground truth global rotation
@@ -225,13 +225,20 @@ class PoseModel3d:
                     predictions=out_2d_gt_pose, delta=self.img_side_len/15,
                     weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
-                total_loss += cam_loss
+                # camera axis y-component should point up and focal length > 0
+                cam_limits = tf.gather(self.outputs, [76, 78], axis=1)
+                cam_zeros = tf.zeros(tf.shape(cam_limits))
+                cam_not_positive = tf.where(
+                    tf.less(cam_limits, cam_zeros), cam_limits, cam_zeros)
+                cam_loss_not_positive = tf.losses.mean_squared_error(
+                    labels=cam_zeros, predictions=cam_not_positive)
+                total_loss += cam_loss + cam_loss_not_positive
 
                 with tf.variable_scope("render"):
                     render = utils.render_mesh_verts_cam(
                         gt_meshes, 
                         self.outputs[:, 72:75], self.outputs[:, 75:78],
-                        tf.atan(1.0 / self.outputs[:, 78]) * 360 / np.pi, 
+                        tf.atan2(1.0, self.outputs[:, 78]) * 360 / np.pi,
                         self.mesh_faces)
                     # lights = tf.constant([[-2., 0., 0.], [0., -2., 0.],
                     #                       [0., 0., -2.], [-1., -1., -1.]])
@@ -280,7 +287,8 @@ class PoseModel3d:
             train_handle = self.sess.run(iterator.string_handle())
 
             _, _, gt_pose, betas, smpl_joints2d = self.next_input
-            gt_pose = utils.rotate_global_pose(gt_pose)
+            # with tf.variable_scope("rotate_global"):
+            #     gt_pose = utils.rotate_global_pose(gt_pose)
             out_pose = self.outputs[:, :72]
 
             total_loss = self.get_encoder_losses(
@@ -289,7 +297,7 @@ class PoseModel3d:
             if self.discriminator:
                 disc_total_loss, disc_enc_loss = self.get_discriminator_loss(
                     out_pose, gt_pose)
-                disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0002)
+                disc_optimizer = tf.train.AdamOptimizer(learning_rate=4e-4)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -301,7 +309,7 @@ class PoseModel3d:
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
+            optimizer = tf.train.AdamOptimizer(learning_rate=2e-4)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

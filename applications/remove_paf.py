@@ -15,13 +15,15 @@ DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
-START_NAME = '62_22'  # Modify with name to start at
+START_NAME = '01_01'  # Modify with name to start at
 
 
 def remove_paf_from_maps(maps_file):
     print(maps_file, file=sys.stderr)
     maps_dict = scipy.io.loadmat(maps_file)
     assert 'heat_mat' in maps_dict
+    heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
+    assert heatmaps.shape[1] == 240
     assert 'detected_2D' in maps_dict
     assert 'visibility_2D' in maps_dict
     try:

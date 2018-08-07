@@ -16,7 +16,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
 START_NAME = '01_01'  # Modify with name to start at
-CHECK_HEATMAPS = False
+CHECK_HEATMAPS = True
 CHECK_JOINTS = True
 
 
@@ -26,7 +26,7 @@ def read_maps(maps_file):
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
         # to shape: time, height, width, n_joints = 19
 
-    return heatmaps, maps_file
+    return heatmaps
 
 def read_joints(info_file):
     print(info_file, file=sys.stderr)
@@ -36,7 +36,7 @@ def read_joints(info_file):
     joints2d = info_dict['joints2D']
     pose = info_dict['pose']
 
-    return joints2d.astype(np.float32), info_file, pose
+    return joints2d.astype(np.float32), pose
 
 
 if __name__ == '__main__':
@@ -66,18 +66,15 @@ if __name__ == '__main__':
             if CHECK_HEATMAPS:
                 value = read_maps(maps_file)
                 shape = value[0].shape
-                filename = value[1]
                 assert shape[1] == 240
             if CHECK_JOINTS:
                 value = read_joints(info_file)
                 shape = value[0].shape
-                info_filename = value[1]
-                filename = info_filename[:-9] + '_maps.mat'
                 assert len(shape) == 3
                 assert shape[0] == 2
                 assert shape[1] == 24
-                assert (np.amax(value[2]) < 2 * np.pi)
-                assert (np.amin(value[2]) > -2 * np.pi)
+                assert (np.amax(value[1]) < 2 * np.pi)
+                assert (np.amin(value[1]) > -2 * np.pi)
         except AssertionError:
-            print(filename)
+            print(maps_file)
             continue

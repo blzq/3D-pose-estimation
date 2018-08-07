@@ -63,7 +63,7 @@ if __name__ == '__main__':
                         saver_path=SAVER_PATH,
                         restore_model=True,
                         mesh_loss=True,
-                        reproject_loss=True,
+                        reproject_loss=False,
                         smpl_model=smpl_neutral,
                         discriminator=False)
 
