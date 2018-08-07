@@ -65,10 +65,18 @@ def main():
     input_locs = heatmaps_to_locations(heatmaps)
     input_locs = np.reshape(input_locs, [1, config.n_joints, 3])
 
+    # Visualise argmaxs
+    # for input_loc in input_locs[0]:
+    #     y, x, _ = (input_loc * 240 + np.array([120, 160, 0])).astype(np.int64)
+    #     in_im = cv2.circle(in_im, (x, y), 3, (255, 0, 255))
+    # plt.imshow(in_im)
+    # plt.show()
+    # exit()
+
     # with different graph so checkpoint is restored correctly
     pm_graph = tf.Graph()
 
-    pm_3d = PoseModel3d((None, 240, 320, 21),
+    pm_3d = PoseModel3d((None, 240, 320, 3 + config.n_joints),
                         pm_graph,
                         mode='test',
                         summary_dir=SUMMARY_DIR,

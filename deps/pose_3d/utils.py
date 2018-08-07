@@ -59,6 +59,9 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces, lights=None):
 
 
 def rotate_global_pose(thetas):
+    # In SURREAL, the global rotation is such that the person's vertical
+    # is aligned with the z axis. Make it so the person's vertical is aligned
+    # with the y axis.
     batch_size = tf.shape(thetas)[0]
     global_rot = thetas[:, :3]
     global_rot_mat = project.rodrigues_batch(global_rot)

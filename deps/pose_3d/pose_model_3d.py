@@ -229,9 +229,10 @@ class PoseModel3d:
 
                 with tf.variable_scope("render"):
                     render = utils.render_mesh_verts_cam(
-                        gt_meshes,
+                        gt_meshes, 
                         self.outputs[:, 72:75], self.outputs[:, 75:78],
-                        tf.atan(1.0 / self.outputs[:, 78]), self.mesh_faces)
+                        tf.atan(1.0 / self.outputs[:, 78]) * 360 / np.pi, 
+                        self.mesh_faces)
                     # lights = tf.constant([[-2., 0., 0.], [0., -2., 0.],
                     #                       [0., 0., -2.], [-1., -1., -1.]])
                     render_outs = utils.render_mesh_verts_cam(
@@ -270,7 +271,7 @@ class PoseModel3d:
     def train(self, batch_size: int, epochs: int):
         """ Train the model using the dataset passed in at model creation """
         with self.graph.as_default():
-            self.dataset = self.dataset.shuffle(batch_size * 64)
+            self.dataset = self.dataset.shuffle(batch_size * 96)
             self.dataset = self.dataset.batch(batch_size)
             self.dataset = self.dataset.prefetch(20)
             # self.dataset = self.dataset.apply(
