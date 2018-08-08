@@ -17,7 +17,7 @@ from tf_pose.networks import get_graph_path
 
 from pose_3d.pose_model_3d import PoseModel3d
 from pose_3d.data_helpers import heatmaps_to_locations, suppress_non_largest_human
-from pose_3d import config
+from pose_3d import config, utils
 
 from tf_smpl.batch_smpl import SMPL
 
@@ -72,6 +72,11 @@ def main():
     # plt.imshow(in_im)
     # plt.show()
     # exit()
+    print(input_locs)
+    softmax, soft_argmax_y, soft_argmax_x = tf.Session().run(utils.soft_argmax(heatmaps))
+    plt.imshow(np.sum(softmax[0], axis=2))
+    plt.show()
+    exit()
 
     # with different graph so checkpoint is restored correctly
     pm_graph = tf.Graph()

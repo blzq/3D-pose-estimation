@@ -64,39 +64,10 @@ def rotate_global_pose(thetas):
     # with the y axis.
     batch_size = tf.shape(thetas)[0]
 
-    turn_x = tf.constant([np.pi / 2, 0.0, 0.0])
+    turn_x = tf.constant([-np.pi / 2, 0.0, 0.0])
     turn_x_batch = tf.reshape(tf.tile(turn_x, [batch_size]), [batch_size, 3])
 
     global_rot_vec = add_axis_angle_rotations(turn_x_batch, thetas[:, :3])
-
-    # global_rot = thetas[:, :3]
-    # global_rot_mat = project.rodrigues_batch(global_rot)
-    # turn_x = tf.constant([[1.0,  0.0, 0.0],
-    #                       [0.0,  0.0, 1.0],
-    #                       [0.0, -1.0, 0.0]])
-    # turn_y = tf.constant([[0.0, 0.0, -1.0],
-    #                       [0.0, 1.0,  0.0],
-    #                       [1.0, 0.0,  0.0]])
-    # turn_both = tf.constant([[0.0, 1.0, 0.0],
-    #                       [0.0, 0.0, 1.0],
-    #                       [1.0, 0.0, 0.0]])
-    # turn_b = tf.reshape(tf.tile(turn_b, [batch_size, 1]), [batch_size, 3, 3])
-    # global_rot_mat = tf.matmul(turn_b, global_rot_mat)
-
-    # Rotation matrix to axis-angle
-    # https://en.wikipedia.org/wiki/Rotation_matrix#Determining_the_axis
-    # Note the case where rotation angle = pi (R = Rt) is treated as angle = 0
-    # global_rv_1 = global_rot_mat[:, 2, 1] - global_rot_mat[:, 1, 2]
-    # global_rv_2 = global_rot_mat[:, 0, 2] - global_rot_mat[:, 2, 0]
-    # global_rv_3 = global_rot_mat[:, 1, 0] - global_rot_mat[:, 0, 1]
-    # global_rot_vec = tf.stack([global_rv_1, global_rv_2, global_rv_3], axis=1)
-    # global_rot_vec_norm = tf.norm(global_rot_vec, axis=1, keepdims=True)
-    # is_zero = tf.equal(tf.squeeze(global_rot_vec_norm), 0.0)
-    # global_rot_vec = global_rot_vec / global_rot_vec_norm
-    # global_rot_vec = tf.where(is_zero,
-    #                           tf.zeros_like(global_rot_vec), global_rot_vec)
-
-    # global_rot_vec = global_rot_vec * tf.asin(global_rot_vec_norm / 2)
 
     thetas = tf.concat([global_rot_vec, thetas[:, 3:]], axis=1)
     return thetas
@@ -107,18 +78,47 @@ def add_axis_angle_rotations(rv1, rv2):
     # cos(c/2) = cos(a/2)cos(b/2) - sin(a/2)sin(b/2) (l . m)
     # sin(c/2) (n) = 
     #   sin(a/2)cos(b/2) (l) + cos(a/2)sin(b/2) (m) + sin(a/2)sin(b/2) (l x m)
-    a = tf.norm(rv1, axis=1)
-    b = tf.norm(rv2, axis=1)
+    a = tf.norm(rv1, axis=1, keepdims=True)
+    b = tf.norm(rv2, axis=1, keepdims=True)
 
-    l = tf.nn.l2_normalize(rv1)
-    m = tf.nn.l2_normalize(rv2)
-
+    l = rv1 / a
+    m = rv2 / b
     cos_half_c = tf.cos(a/2) * tf.cos(b/2) - (
-        tf.sin(a/2) * tf.sin(b/2) * tf.matmul(l, m, transpose_b=True))
+        tf.sin(a/2) * tf.sin(b/2) * 
+        tf.reduce_sum(l * m, axis=1, keepdims=True))
     sin_half_c_n = tf.sin(a/2) * tf.cos(b/2) * l + (
         tf.cos(a/2) * tf.sin(b/2) * m + 
         tf.sin(a/2) * tf.sin(b/2) * tf.cross(l, m))
 
     half_c = tf.acos(cos_half_c)
     n = sin_half_c_n / tf.sin(half_c)
-    return n * half_c * 2
+    result = n * half_c * 2
+
+    result = tf.where(tf.equal(tf.squeeze(a), 0.0), rv2, result)
+    result = tf.where(tf.equal(tf.squeeze(b), 0.0), rv1, result)
+    return result
+
+
+def soft_argmax(heatmaps):
+    # https://arxiv.org/pdf/1603.09114.pdf - equation 7
+    # use softmax(heatmaps) * indices as replacement for argmax
+    strength = 100.0
+    shape = tf.shape(heatmaps)
+    b, h, w, c = shape[0], shape[1], shape[2], shape[3]
+    y_ind = tf.reshape(tf.tile(tf.range(h)[..., tf.newaxis], [1, w]), [h, w])
+    x_ind = tf.reshape(tf.tile(tf.range(w)[..., tf.newaxis], [h, 1]), [h, w])
+    y_ind = tf.cast(y_ind, tf.float32)
+    x_ind = tf.cast(x_ind, tf.float32)
+
+    softmax = tf.nn.softmax(tf.reshape(strength * heatmaps, [b, h * w, c]), 
+                            axis=1)
+    softmax = tf.reshape(softmax, [b, h, w, c])
+    
+    soft_argmax_y = softmax * tf.reshape(y_ind, [1, h, w, 1])
+    soft_argmax_x = softmax * tf.reshape(x_ind, [1, h, w, 1])
+    
+    y_locations = tf.reduce_sum(soft_argmax_y, axis=[1, 2])
+    x_locations = tf.reduce_sum(soft_argmax_x, axis=[1, 2])
+    maxes = tf.reduce_max(heatmaps, axis=[1, 2])
+
+    return softmax, soft_argmax_y, soft_argmax_x # tf.stack([y_locations, x_locations, maxes], axis=2)

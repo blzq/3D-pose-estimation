@@ -93,12 +93,12 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = locations.astype(np.float32)
     # Normalize detection locations by image size
     # Move centre of image to (0, 0)
-    img_dim = np.array(hs[1:3], dtype=np.float32)
-    img_side_length = np.minimum(img_dim[0], img_dim[1])
-    np.divide(img_dim, 2, out=img_dim)
-    np.subtract(locations, img_dim, out=locations)
-    # Scale detection locations by shorter side length
-    np.divide(locations, img_side_length, out=locations)
+    # img_dim = np.array(hs[1:3], dtype=np.float32)
+    # img_side_length = np.minimum(img_dim[0], img_dim[1])
+    # np.divide(img_dim, 2, out=img_dim)
+    # np.subtract(locations, img_dim, out=locations)
+    # # Scale detection locations by shorter side length
+    # np.divide(locations, img_side_length, out=locations)
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost
@@ -116,7 +116,7 @@ def heatmaps_to_locations(heatmaps_image_stack):
 
 
 def suppress_non_largest_human(humans, heatmaps, expected_in_size):
-    d = 8  # padding around other humans to suppress
+    d = 10  # padding around other humans to also suppress
     largest_human_size = 0
     human_extents = []
     largest_human_idx = -1

@@ -133,12 +133,10 @@ class PoseModel3d:
                 self.saver = tf.train.Saver()
             if self.restore:
                 self.restore_from_checkpoint()
-            summary = tf.summary.merge_all()
-            out, summary_val = self.sess.run(
-                (self.outputs, summary),
+            out = self.sess.run(
+                self.outputs,
                 feed_dict={self.in_placehold: input_inst,
                            self.in_placehold_loc: input_loc})
-            self.summary_writer.add_summary(summary_val)
         return out
 
     def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d):
@@ -253,27 +251,26 @@ class PoseModel3d:
 
     def get_discriminator_loss(self, out_pose, gt_pose):
         with self.graph.as_default():
-            disc_real_out, disc_pred_out = \
-                tf.split(self.discriminator_outputs, 2, axis=0)
+            # First half is real (gt), second half is fake (predictions)
+            # First output true, second output false
+            batch_size = tf.shape(self.discriminator_outputs)[0] / 2
+            real_labels = tf.reshape(tf.tile([1, 0], [batch_size]),
+                                     [batch_size, 2])
+            fake_labels = tf.reshape(tf.tile([0, 1], [batch_size]), 
+                                     [batch_size, 2])
+            disc_loss = tf.losses.softmax_cross_entropy(
+                onehot_labels=tf.concat([real_labels, fake_labels], axis=0),
+                logits=self.discriminator_outputs)
+            tf.summary.scalar('discriminator_loss', disc_loss,
+                              family='discriminator')
 
-            disc_real_loss = tf.losses.mean_squared_error(
-                labels=tf.ones(tf.shape(gt_pose)),
-                predictions=disc_real_out)
-            tf.summary.scalar('discriminator_real_loss', disc_real_loss,
-                                family='discriminator')
-            disc_fake_loss = tf.losses.mean_squared_error(
-                labels=tf.zeros(tf.shape(out_pose)),
-                predictions=disc_pred_out)
-            tf.summary.scalar('discriminator_fake_loss', disc_fake_loss,
-                                family='discriminator')
-            disc_total_loss = disc_real_loss + disc_fake_loss
-
-            disc_enc_loss = tf.losses.mean_squared_error(
-                labels=tf.ones(tf.shape(out_pose)),
-                predictions=disc_pred_out, weights=config.disc_loss_scale)
-            tf.summary.scalar('discriminator_loss', disc_enc_loss,
-                                family='losses')
-            return disc_total_loss, disc_enc_loss
+            disc_pred_out = self.discriminator_outputs[batch_size:]
+            disc_enc_loss = tf.losses.softmax_cross_entropy(
+                onehot_labels=real_labels,
+                logits=disc_pred_out, weights=config.disc_loss_scale)
+            tf.summary.scalar('discriminator_loss', disc_enc_loss, 
+                              family='losses')
+            return disc_loss, disc_enc_loss
 
     def train(self, batch_size: int, epochs: int):
         """ Train the model using the dataset passed in at model creation """
@@ -287,8 +284,8 @@ class PoseModel3d:
             train_handle = self.sess.run(iterator.string_handle())
 
             _, _, gt_pose, betas, smpl_joints2d = self.next_input
-            # with tf.variable_scope("rotate_global"):
-            #     gt_pose = utils.rotate_global_pose(gt_pose)
+            with tf.variable_scope("rotate_global"):
+                gt_pose = utils.rotate_global_pose(gt_pose)
             out_pose = self.outputs[:, :72]
 
             total_loss = self.get_encoder_losses(

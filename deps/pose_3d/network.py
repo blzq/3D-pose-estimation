@@ -28,37 +28,35 @@ def build_model(inputs, inputs_locs, training: bool):
             in_concat = tf.concat([features_flat, locations_flat], axis=1)
 
             l_units = in_concat.get_shape().as_list()[1]
-            init_l = tf.layers.dense(in_concat, l_units)
+            in_dense = tf.layers.dense(locations_flat, l_units)
+            in_bn = tf.layers.batch_normalization(in_dense, training=training)
+            in_relu = tf.nn.relu(in_bn)
 
         with tf.variable_scope('bilinear_blocks'):
-            bl1 = _bilinear_res_block(init_l, l_units, training, in_act=False)
+            bl1 = _bilinear_res_block(in_relu, l_units, training, 
+                                      input_activation=False)
             bl2 = _bilinear_res_block(bl1, l_units, training)
             bl3 = _bilinear_res_block(bl2, l_units, training)
             bl4 = _bilinear_res_block(bl3, l_units, training)
-            bl_end = tf.layers.dense(bl4, l_units)
-            bl_bn = tf.layers.batch_normalization(bl_end, training=training)
-            bl_relu = tf.nn.relu(bl_bn)
 
         with tf.variable_scope('out_fc'):
-            out = tf.layers.dense(bl_relu, 79) # 24*3 rotations + 7 cam params
+            out = tf.layers.dense(bl4, 79) # 24*3 rotations + 7 cam params
             
-        # tf.summary.histogram('out_pose', out[:, :72])
-
     return out
 
 
-def _bilinear_res_block(inputs, units, training: bool, in_act=True):
-    if in_act:
+def _bilinear_res_block(inputs, units, training: bool, input_activation=True):
+    if input_activation:
         in_bn = tf.layers.batch_normalization(inputs, training=training)
         in_relu = tf.nn.relu(in_bn)
-        linear_in = tf.layers.dropout(in_relu, 0.4, training=training)
+        linear_in = tf.layers.dropout(in_relu, 0.2, training=training)
     else:
         linear_in = inputs
     linear1 = tf.layers.dense(linear_in, units)
+
     bn1 = tf.layers.batch_normalization(linear1, training=training)
     relu1 = tf.nn.relu(bn1)
-    dropout1 = tf.layers.dropout(relu1, 0.4, training=training)
-
+    dropout1 = tf.layers.dropout(relu1, 0.2, training=training)
     linear2 = tf.layers.dense(dropout1, units)
 
     add = tf.add(inputs, linear2)
@@ -157,14 +155,14 @@ def build_discriminator(inputs):
 
         flatten = tf.layers.flatten(init_relu1)
 
-        linear1 = tf.layers.dense(flatten, 512)
+        linear1 = tf.layers.dense(flatten, 1024)
         relu1 = tf.nn.leaky_relu(linear1)
 
-        linear2 = tf.layers.dense(relu1, 256)
+        linear2 = tf.layers.dense(relu1, 1024)
         relu2 = tf.nn.leaky_relu(linear2)
 
-        linear3 = tf.layers.dense(relu2, 128)
+        linear3 = tf.layers.dense(relu2, 72)
         relu3 = tf.nn.leaky_relu(linear3)
 
-        out = tf.layers.dense(relu3, 72)
+        out = tf.layers.dense(relu3, 2)
         return out
