@@ -3,11 +3,13 @@
 import tensorflow as tf
 import numpy as np
 import pkg_resources
+import scipy.ndimage
 
 from . import config
 from tf_mesh_renderer import mesh_renderer
 import tf_smpl
 from tf_perspective_projection import project
+import tf_pose.common
 
 
 def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces, lights=None):
@@ -76,7 +78,7 @@ def rotate_global_pose(thetas):
 def add_axis_angle_rotations(rv1, rv2):
     # given angle*axis rotation vectors a*l and b*m, result angle*axis: c*n
     # cos(c/2) = cos(a/2)cos(b/2) - sin(a/2)sin(b/2) (l . m)
-    # sin(c/2) (n) = 
+    # sin(c/2) (n) =
     #   sin(a/2)cos(b/2) (l) + cos(a/2)sin(b/2) (m) + sin(a/2)sin(b/2) (l x m)
     a = tf.norm(rv1, axis=1, keepdims=True)
     b = tf.norm(rv2, axis=1, keepdims=True)
@@ -84,10 +86,10 @@ def add_axis_angle_rotations(rv1, rv2):
     l = rv1 / a
     m = rv2 / b
     cos_half_c = tf.cos(a/2) * tf.cos(b/2) - (
-        tf.sin(a/2) * tf.sin(b/2) * 
+        tf.sin(a/2) * tf.sin(b/2) *
         tf.reduce_sum(l * m, axis=1, keepdims=True))
     sin_half_c_n = tf.sin(a/2) * tf.cos(b/2) * l + (
-        tf.cos(a/2) * tf.sin(b/2) * m + 
+        tf.cos(a/2) * tf.sin(b/2) * m +
         tf.sin(a/2) * tf.sin(b/2) * tf.cross(l, m))
 
     half_c = tf.acos(cos_half_c)
@@ -101,24 +103,65 @@ def add_axis_angle_rotations(rv1, rv2):
 
 def soft_argmax(heatmaps):
     # https://arxiv.org/pdf/1603.09114.pdf - equation 7
-    # use softmax(heatmaps) * indices as replacement for argmax
+    # use softmax(heatmaps) * indices as differentiable replacement for argmax
     strength = 100.0
     shape = tf.shape(heatmaps)
     b, h, w, c = shape[0], shape[1], shape[2], shape[3]
-    y_ind = tf.reshape(tf.tile(tf.range(h)[..., tf.newaxis], [1, w]), [h, w])
-    x_ind = tf.reshape(tf.tile(tf.range(w)[..., tf.newaxis], [h, 1]), [h, w])
+    # x_ind = tf.reshape(tf.tile(tf.range(w)[..., tf.newaxis], [h, 1]), [h, w])
+    # y_ind = tf.reshape(tf.tile(tf.range(h)[..., tf.newaxis], [1, w]), [h, w])
+    x_ind, y_ind = tf.meshgrid(tf.range(w), tf.range(h))
     y_ind = tf.cast(y_ind, tf.float32)
     x_ind = tf.cast(x_ind, tf.float32)
 
-    softmax = tf.nn.softmax(tf.reshape(strength * heatmaps, [b, h * w, c]), 
+    softmax = tf.nn.softmax(tf.reshape(strength * heatmaps, [b, h * w, c]),
                             axis=1)
     softmax = tf.reshape(softmax, [b, h, w, c])
-    
+
     soft_argmax_y = softmax * tf.reshape(y_ind, [1, h, w, 1])
     soft_argmax_x = softmax * tf.reshape(x_ind, [1, h, w, 1])
-    
+
     y_locations = tf.reduce_sum(soft_argmax_y, axis=[1, 2])
     x_locations = tf.reduce_sum(soft_argmax_x, axis=[1, 2])
     maxes = tf.reduce_max(heatmaps, axis=[1, 2])
 
-    return softmax, soft_argmax_y, soft_argmax_x # tf.stack([y_locations, x_locations, maxes], axis=2)
+    return tf.stack([y_locations, x_locations], axis=2), maxes
+
+
+def soft_argmax_rescaled(heatmaps):
+    img_dim = tf.cast(tf.shape(heatmaps)[1:3], tf.float32)
+    locations, maxes = soft_argmax(heatmaps)
+
+    # Move centre of image to (0, 0)
+    half_img_dim = img_dim / 2
+    locations = locations - half_img_dim[tf.newaxis]
+    # Scale detection locations by shorter side length
+    img_side_len = tf.minimum(img_dim[0], img_dim[1])
+    locations = locations / img_side_len[tf.newaxis]
+
+    # Maybe don't want to do this part because information for camera is lost
+    # Normalize centre of person as middle of left and right hips
+    rhip_idx = tf_pose.common.CocoPart.RHip.value
+    lhip_idx = tf_pose.common.CocoPart.LHip.value
+    centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
+    locations = locations - centres[:, tf.newaxis]
+    # Normalize joint locations to [-1, 1] in x and y
+    max_extents = tf.reduce_max(tf.abs(locations), axis=[1, 2], keepdims=True)
+    locations = locations / max_extents
+
+    return tf.concat([locations, maxes[..., tf.newaxis]], axis=2)
+
+
+def gaussian_blur(img, kernel_size=11, sigma=5):
+    def gauss_kernel(channels, kernel_size, sigma):
+        ax = tf.range(-kernel_size // 2 + 1.0, kernel_size // 2 + 1.0)
+        xx, yy = tf.meshgrid(ax, ax)
+        kernel = tf.exp(-(xx ** 2 + yy ** 2) / (2.0 * sigma ** 2))
+        kernel = kernel / tf.reduce_sum(kernel)
+        kernel = tf.tile(kernel[..., tf.newaxis], [1, 1, channels])
+        return kernel
+
+    gaussian_kernel = gauss_kernel(tf.shape(img)[-1], kernel_size, sigma)
+    gaussian_kernel = gaussian_kernel[..., tf.newaxis]
+
+    return tf.nn.depthwise_conv2d_native(img, gaussian_kernel, [1, 1, 1, 1],
+                                         padding='SAME', data_format='NHWC')

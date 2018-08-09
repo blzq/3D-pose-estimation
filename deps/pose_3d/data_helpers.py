@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
-from tf_pose import common
+import tf_pose.common
 from . import config
 
 
@@ -16,7 +16,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
     dataset = dataset.apply(tf.contrib.data.parallel_interleave(
         lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(
             tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
-                             [tf.float32, tf.float32, tf.float32,
+                             [tf.float32, tf.float32, 
                               tf.float32, tf.float32]))),
         cycle_length=6, block_length=1, sloppy=True,
         buffer_output_elements=32, prefetch_input_elements=4))
@@ -63,12 +63,12 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     frames = frames[:min_length]
 
     concat = np.concatenate([heatmaps, frames], axis=3)
-    locations = heatmaps_to_locations(concat)
 
-    return concat, locations, poses, shapes, joints2d.astype(np.float32)
+    return concat, poses, shapes, joints2d.astype(np.float32)
 
 
 def heatmaps_to_locations(heatmaps_image_stack):
+    # Currently unused in favour of utils.soft_argmax_rescaled
     heatmaps = heatmaps_image_stack[:, :, :, :config.n_joints]
     # heatmaps: (batch, h, w, c)
     hs = heatmaps.shape
@@ -93,23 +93,22 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = locations.astype(np.float32)
     # Normalize detection locations by image size
     # Move centre of image to (0, 0)
-    # img_dim = np.array(hs[1:3], dtype=np.float32)
-    # img_side_length = np.minimum(img_dim[0], img_dim[1])
-    # np.divide(img_dim, 2, out=img_dim)
-    # np.subtract(locations, img_dim, out=locations)
-    # # Scale detection locations by shorter side length
-    # np.divide(locations, img_side_length, out=locations)
+    img_dim = np.array(hs[1:3], dtype=np.float32)
+    img_side_length = np.minimum(img_dim[0], img_dim[1])
+    np.divide(img_dim, 2, out=img_dim)
+    np.subtract(locations, img_dim, out=locations)
+    # Scale detection locations by shorter side length
+    np.divide(locations, img_side_length, out=locations)
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost
     # Normalize centre of person as middle of left and right hips
-    # rhip_idx = common.CocoPart.RHip.value
-    # lhip_idx = common.CocoPart.LHip.value
+    # rhip_idx = tf_pose.common.CocoPart.RHip.value
+    # lhip_idx = tf_pose.common.CocoPart.LHip.value
     # centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
     # locations = locations - centres[:, np.newaxis]
-    # locations = np.reshape(locations, [hs[0], -1])
-    # # Normalize joint locations to [-1, 1] in x and y
-    # maxs = np.amax(np.abs(locations), axis=1, keepdims=True)
+    # Normalize joint locations to [-1, 1] in x and y
+    # maxs = np.amax(np.abs(locations), axis=[1, 2], keepdims=True)
     # locations = locations / maxs
 
     return locations_with_vals
@@ -124,7 +123,7 @@ def suppress_non_largest_human(humans, heatmaps, expected_in_size):
     for h_idx, human in enumerate(humans):
         min_x, max_x = float('inf'), 0
         min_y, max_y = float('inf'), 0
-        for i in range(common.CocoPart.Background.value):
+        for i in range(tf_pose.common.CocoPart.Background.value):
             if i not in human.body_parts.keys():
                 continue
             body_part = human.body_parts[i]

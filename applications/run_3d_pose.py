@@ -16,7 +16,7 @@ from tf_pose.estimator import TfPoseEstimator as OpPoseEstimator
 from tf_pose.networks import get_graph_path
 
 from pose_3d.pose_model_3d import PoseModel3d
-from pose_3d.data_helpers import heatmaps_to_locations, suppress_non_largest_human
+from pose_3d.data_helpers import suppress_non_largest_human
 from pose_3d import config, utils
 
 from tf_smpl.batch_smpl import SMPL
@@ -27,7 +27,7 @@ SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'test_image.jpg'))
+    in_im = cv2.imread(os.path.join(images_path, 'joints_vis.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     expect_sz = config.input_img_size
     expect_aspect = expect_sz[1] / expect_sz[0]
@@ -54,7 +54,7 @@ def main():
                                     target_size=(expect_sz[1], expect_sz[0]),
                                     tf_config=tfconfig)
     humans = estimator.inference(in_im,
-                                 resize_to_default=True, upsample_size=8.0)
+                                 resize_to_default=True, upsample_size=8)
     heatmaps = estimator.heatMat[:, :, :config.n_joints]
     heatmaps = suppress_non_largest_human(humans, heatmaps,
                                           expect_sz)
@@ -62,21 +62,19 @@ def main():
 
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
     inputs = np.concatenate([heatmaps, in_im_3d[np.newaxis]], axis=3)
-    input_locs = heatmaps_to_locations(heatmaps)
-    input_locs = np.reshape(input_locs, [1, config.n_joints, 3])
 
     # Visualise argmaxs
+    # input_locs = tf.Session().run(utils.soft_argmax_rescaled(heatmaps))
+    # input_locs = input_locs[0]
+    # plt.scatter(input_locs[:, 1], input_locs[:, 0])
+    # plt.gca().invert_yaxis()
+    # plt.show()
     # for input_loc in input_locs[0]:
-    #     y, x, _ = (input_loc * 240 + np.array([120, 160, 0])).astype(np.int64)
-    #     in_im = cv2.circle(in_im, (x, y), 3, (255, 0, 255))
+    #     y, x, _ = (input_loc * 240 + np.array([120, 160, 0])).astype(np.int32)
+    #     in_im = cv2.circle(in_im, (x, y), 3, (0, 255, 255))
     # plt.imshow(in_im)
     # plt.show()
     # exit()
-    print(input_locs)
-    softmax, soft_argmax_y, soft_argmax_x = tf.Session().run(utils.soft_argmax(heatmaps))
-    plt.imshow(np.sum(softmax[0], axis=2))
-    plt.show()
-    exit()
 
     # with different graph so checkpoint is restored correctly
     pm_graph = tf.Graph()
@@ -87,7 +85,7 @@ def main():
                         summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
                         restore_model=True)
-    out_vals = pm_3d.estimate(inputs, input_locs)
+    out_vals = pm_3d.estimate(inputs)
 
     print(out_vals)
 

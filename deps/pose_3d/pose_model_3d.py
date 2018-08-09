@@ -48,12 +48,9 @@ class PoseModel3d:
                     self.dataset.output_types, self.dataset.output_shapes)
                 self.next_input = iterator.get_next()
                 # placeholders for shape inference
-                self.in_placehold = tf.placeholder_with_default(
+                self.in_placeholder = tf.placeholder_with_default(
                     self.next_input[0], input_shape)
-                self.in_placehold_loc = tf.placeholder_with_default(
-                    self.next_input[1], [None, config.n_joints, 3])
-                self.outputs = build_model(
-                    self.in_placehold, self.in_placehold_loc, training)
+                self.outputs = build_model(self.in_placeholder, training)
                 self.mesh_loss = mesh_loss
                 self.reproject_loss = reproject_loss
                 if self.mesh_loss or self.reproject_loss:
@@ -65,16 +62,13 @@ class PoseModel3d:
                 if self.discriminator:
                     if training:
                         d_in = tf.concat(
-                            [self.next_input[2], self.outputs[:, :72]], 0)
+                            [self.next_input[1], self.outputs[:, :72]], 0)
                     else:
                         d_in = self.outputs
                     self.discriminator_outputs = build_discriminator(d_in)
             else:
-                self.in_placehold = tf.placeholder(tf.float32, input_shape)
-                self.in_placehold_loc = tf.placeholder(
-                    tf.float32, [None, config.n_joints, 3])
-                self.outputs = build_model(
-                    self.in_placehold, self.in_placehold_loc, training=False)
+                self.in_placeholder = tf.placeholder(tf.float32, input_shape)
+                self.outputs = build_model(self.in_placeholder, training=False)
 
             self.step = tf.train.get_or_create_global_step()
 
@@ -95,8 +89,7 @@ class PoseModel3d:
         """ Save the model as a tf.SavedModel """
         with self.graph.as_default():
             tf.saved_model.simple_save(self.sess, save_model_path,
-                                       {'in': self.in_placehold,
-                                        'in_loc': self.in_placehold_loc},
+                                       {'in': self.in_placeholder},
                                        {'out': self.outputs})
 
     def restore_from_checkpoint(self):
@@ -126,7 +119,7 @@ class PoseModel3d:
                         "\nContinuing without loading model{}".format(
                         warn_col, self.saver_path, normal_col))
 
-    def estimate(self, input_inst, input_loc):
+    def estimate(self, input_inst):
         """ Run the model on an input instance """
         with self.graph.as_default():
             if self.saver is None:
@@ -135,8 +128,7 @@ class PoseModel3d:
                 self.restore_from_checkpoint()
             out = self.sess.run(
                 self.outputs,
-                feed_dict={self.in_placehold: input_inst,
-                           self.in_placehold_loc: input_loc})
+                feed_dict={self.in_placeholder: input_inst})
         return out
 
     def get_encoder_losses(self, out_pose, gt_pose, betas, smpl_joints2d):
@@ -283,7 +275,7 @@ class PoseModel3d:
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
-            _, _, gt_pose, betas, smpl_joints2d = self.next_input
+            _, gt_pose, betas, smpl_joints2d = self.next_input
             with tf.variable_scope("rotate_global"):
                 gt_pose = utils.rotate_global_pose(gt_pose)
             out_pose = self.outputs[:, :72]
@@ -328,8 +320,8 @@ class PoseModel3d:
                 self.sess.run(iterator.initializer)
                 feed = {self.input_handle: train_handle}
                 while True:
+                    gs = tf.train.global_step(self.sess, self.step)
                     try:
-                        gs = tf.train.global_step(self.sess, self.step)
                         if self.discriminator:
                             _, summary_eval, _ = self.sess.run(
                                 (train, summary, train_discriminator),
@@ -337,11 +329,12 @@ class PoseModel3d:
                         else:
                             _, summary_eval = self.sess.run(
                                 (train, summary), feed_dict=feed)
-                        self.summary_writer.add_summary(summary_eval, gs)
-                        # self.beholder.update(session=self.sess)
                     except tf.errors.OutOfRangeError:
                         break
                     print("{:7}".format(gs), end=' ', flush=True)
+                    if gs % 10 == 0:
+                        self.summary_writer.add_summary(summary_eval, gs)
+                        # self.beholder.update(session=self.sess)
                     if gs % 2000 == 0:
                         self.saver.save(self.sess, self.saver_path,
                                         global_step=self.step)
@@ -354,7 +347,7 @@ class PoseModel3d:
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 
-            _, _, gt_pose, betas, smpl_joints2d = self.next_input
+            _, gt_pose, betas, smpl_joints2d = self.next_input
 
             out_pose = self.outputs[:, :72]
             pose_loss = tf.losses.mean_squared_error(

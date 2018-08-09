@@ -7,13 +7,24 @@ from tensorflow import keras
 from tf_perspective_projection.project import rodrigues_batch
 from tf_pose.common import CocoPart
 
+from . import utils
+from . import config
 
-def build_model(inputs, inputs_locs, training: bool):
+
+def build_model(inputs, training: bool):
     with tf.variable_scope('encoder'):
+        with tf.variable_scope("preprocess_heatmaps"):
+            inputs = tf.check_numerics(inputs, "inputs not finite")
+            input_rgb = inputs[:, :, :, config.n_joints:]
+            input_heatmaps = inputs[:, :, :, :config.n_joints]
+            input_heatmaps = utils.gaussian_blur(input_heatmaps)
+            inputs = tf.concat([input_heatmaps, input_rgb], axis=3)
+
+            heatmaps_sum = tf.reduce_sum(heatmaps, axis=3, keepdims=True)
+            tf.summary.image("input", input_rgb * heatmaps_sum)
+
         with tf.variable_scope('init_conv'):
             in_channels = inputs.get_shape().as_list()[-1]
-
-            inputs = tf.check_numerics(inputs, "in_heatmaps_not_finite")
             init_conv1 = tf.layers.conv2d(inputs, in_channels, [3, 3])
             bn1 = tf.layers.batch_normalization(init_conv1, training=training)
             conv_relu1 = tf.nn.relu(bn1)
@@ -22,9 +33,9 @@ def build_model(inputs, inputs_locs, training: bool):
             mn = _mobilenetv2(conv_relu1, training, alpha=1.4)
 
         with tf.variable_scope('init_dense'):
-            inputs_locs = tf.check_numerics(inputs_locs, "in_locs_not_finite")
+            input_locations = utils.soft_argmax_rescaled(input_heatmaps)
             features_flat = tf.layers.flatten(mn)
-            locations_flat = tf.layers.flatten(inputs_locs)
+            locations_flat = tf.layers.flatten(input_locations)
             in_concat = tf.concat([features_flat, locations_flat], axis=1)
 
             l_units = in_concat.get_shape().as_list()[1]
@@ -33,15 +44,15 @@ def build_model(inputs, inputs_locs, training: bool):
             in_relu = tf.nn.relu(in_bn)
 
         with tf.variable_scope('bilinear_blocks'):
-            bl1 = _bilinear_res_block(in_relu, l_units, training, 
+            bl1 = _bilinear_res_block(in_relu, l_units, training,
                                       input_activation=False)
             bl2 = _bilinear_res_block(bl1, l_units, training)
             bl3 = _bilinear_res_block(bl2, l_units, training)
             bl4 = _bilinear_res_block(bl3, l_units, training)
 
         with tf.variable_scope('out_fc'):
-            out = tf.layers.dense(bl4, 79) # 24*3 rotations + 7 cam params
-            
+            out = tf.layers.dense(bl2, 79) # 24*3 rotations + 7 cam params
+
     return out
 
 
@@ -114,10 +125,6 @@ def _mobilenetv2_block(inputs, filters: int, stride: int, expansion: int,
     else:
         ex_out = inputs
 
-    # This layer contains an extra pointwise 1x1 conv compared to MobileNetv2
-    # d_chans = ex_out.get_shape().as_list()[-1]
-    # depthwise = tf.layers.separable_conv2d(ex_out, d_chans, [3, 3], stride,
-    #                                        padding='same')
     depthwise = keras.layers.DepthwiseConv2D([3, 3], stride,
                                              padding='same')(ex_out)
     dw_bn = tf.layers.batch_normalization(depthwise, training=training)
