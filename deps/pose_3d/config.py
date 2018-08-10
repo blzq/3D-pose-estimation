@@ -11,7 +11,7 @@ reg_loss_scale = 1.0
 reg_joint_limit = pi * 2.0
 disc_loss_scale = 2
 reproj_loss_scale = 0  # 0.000016
-cam_loss_scale = 0.000016
+cam_loss_scale = 0  # 0.000016
 n_joints = 14  # COCO number of joints (not including background, eyes, ears)
 n_joints_smpl = 24  # SMPL model number of joints
 

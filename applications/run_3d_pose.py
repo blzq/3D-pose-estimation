@@ -59,6 +59,8 @@ def main():
     heatmaps = suppress_non_largest_human(humans, heatmaps,
                                           expect_sz)
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
+    print(np.sum(heatmaps))
+    exit()
 
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
     inputs = np.concatenate([heatmaps, in_im_3d[np.newaxis]], axis=3)
@@ -88,6 +90,7 @@ def main():
     out_vals = pm_3d.estimate(inputs)
 
     print(out_vals)
+    out_vals[:, :3] = 0
 
     smpl_dir = os.path.join(__init__.project_path,
                             'data', 'SMPL_model', 'models_numpy')

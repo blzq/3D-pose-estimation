@@ -18,7 +18,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
             tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
                              [tf.float32, tf.float32, 
                               tf.float32, tf.float32]))),
-        cycle_length=6, block_length=1, sloppy=True,
+        cycle_length=12, block_length=1, sloppy=True,
         buffer_output_elements=32, prefetch_input_elements=4))
 
     return dataset
@@ -27,8 +27,11 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
 def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
+    # mask = maps_dict['mask']
+    # diffs = maps_dict['diffs']
+    # np.logical_and(mask, diffs < 100, out=mask)
     heatmaps = heatmaps[:, :, :, :config.n_joints]
-        # to shape: time, height, width, n_joints = 18
+        # to shape: time, height, width, n_joints
     # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
     heatmaps = np.flip(heatmaps, axis=2)
     img_size_x = heatmaps.shape[2]
@@ -44,26 +47,19 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
 
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
                for f in glob.glob(frames_path + b'/f*.jpg') ]
+    frames = np.array(frames, dtype=np.float32)
     frames = [ cv2.normalize(frame, None, 0, 1, cv2.NORM_MINMAX)
                for frame in frames ]
-    # frames = [ cv2.resize(frame,
-    #                       dsize=(heatmaps.shape[2], heatmaps.shape[1]),
-    #                       interpolation=cv2.INTER_AREA)
-    #            for frame in frames ]
-    frames = np.array(frames, dtype=np.float32)
-        # shape: time, 240, 320
     # Flip image horizontally because image and 3D GT are flipped in SURREAL
     frames = np.flip(frames, axis=2)
 
-    min_length = np.min([frames.shape[0], poses.shape[0], heatmaps.shape[0]])
-    heatmaps = heatmaps[:min_length]
-    poses = poses[:min_length]
-    shapes = shapes[:min_length]
-    joints2d = joints2d[:min_length]
-    frames = frames[:min_length]
-
+    # heatmaps = heatmaps[mask]
+    # frames = frames[mask]
+    # poses = poses[mask]
+    # shapes = shapes[mask]
+    # joints2d = joints2d[mask]
+    
     concat = np.concatenate([heatmaps, frames], axis=3)
-
     return concat, poses, shapes, joints2d.astype(np.float32)
 
 
@@ -92,22 +88,22 @@ def heatmaps_to_locations(heatmaps_image_stack):
     # locations: (batch, c, 2 = [y, x])
     locations = locations.astype(np.float32)
     # Normalize detection locations by image size
-    # Move centre of image to (0, 0)
+    # Move centre of image to (0, 0) and
+    # scale detection locations by shorter side length
     img_dim = np.array(hs[1:3], dtype=np.float32)
     img_side_length = np.minimum(img_dim[0], img_dim[1])
     np.divide(img_dim, 2, out=img_dim)
     np.subtract(locations, img_dim, out=locations)
-    # Scale detection locations by shorter side length
     np.divide(locations, img_side_length, out=locations)
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost
     # Normalize centre of person as middle of left and right hips
+    # and normalize joint locations to [-1, 1]
     # rhip_idx = tf_pose.common.CocoPart.RHip.value
     # lhip_idx = tf_pose.common.CocoPart.LHip.value
     # centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
     # locations = locations - centres[:, np.newaxis]
-    # Normalize joint locations to [-1, 1] in x and y
     # maxs = np.amax(np.abs(locations), axis=[1, 2], keepdims=True)
     # locations = locations / maxs
 

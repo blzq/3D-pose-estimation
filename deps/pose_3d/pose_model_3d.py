@@ -48,8 +48,10 @@ class PoseModel3d:
                     self.dataset.output_types, self.dataset.output_shapes)
                 self.next_input = iterator.get_next()
                 # placeholders for shape inference
+                # self.in_placeholder = tf.placeholder_with_default(
+                #     self.next_input[0], input_shape)
                 self.in_placeholder = tf.placeholder_with_default(
-                    self.next_input[0], input_shape)
+                    self.next_input[3], (None, 24, 2))
                 self.outputs = build_model(self.in_placeholder, training)
                 self.mesh_loss = mesh_loss
                 self.reproject_loss = reproject_loss
@@ -225,17 +227,17 @@ class PoseModel3d:
                 total_loss += cam_loss + cam_loss_not_positive
 
                 with tf.variable_scope("render"):
+                    # render = utils.render_mesh_verts_cam(
+                    #     gt_meshes, 
+                    #     self.outputs[:, 72:75], self.outputs[:, 75:78],
+                    #     tf.atan2(1.0, self.outputs[:, 78]) * 360 / np.pi,
+                    #     self.mesh_faces)
                     render = utils.render_mesh_verts_cam(
-                        gt_meshes, 
-                        self.outputs[:, 72:75], self.outputs[:, 75:78],
-                        tf.atan2(1.0, self.outputs[:, 78]) * 360 / np.pi,
-                        self.mesh_faces)
-                    # lights = tf.constant([[-2., 0., 0.], [0., -2., 0.],
-                    #                       [0., 0., -2.], [-1., -1., -1.]])
+                        gt_meshes, tf.constant([0.0, 0.0, -3.5]),
+                        tf.constant([0., 0., 0.]), 40.0, self.mesh_faces)
                     render_outs = utils.render_mesh_verts_cam(
                         out_meshes, tf.constant([0.0, 0.0, -3.5]),
-                        tf.constant([0., 0., 0.]), 40.0, self.mesh_faces,
-                        lights=None)
+                        tf.constant([0., 0., 0.]), 40.0, self.mesh_faces)
                 tf.summary.image('silhouettes', render, max_outputs=1)
                 tf.summary.image('output_meshes', render_outs, max_outputs=1)
 
@@ -269,7 +271,7 @@ class PoseModel3d:
         with self.graph.as_default():
             self.dataset = self.dataset.shuffle(batch_size * 96)
             self.dataset = self.dataset.batch(batch_size)
-            self.dataset = self.dataset.prefetch(20)
+            self.dataset = self.dataset.prefetch(16)
             # self.dataset = self.dataset.apply(
             #     tf.contrib.data.copy_to_device("/gpu:0")).prefetch(1)
             iterator = self.dataset.make_initializable_iterator()

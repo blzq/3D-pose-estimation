@@ -10,6 +10,8 @@ import glob
 import numpy as np
 import scipy.io
 
+from pose_3d.data_helpers import heatmaps_to_locations
+
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
@@ -33,7 +35,7 @@ def read_joints(info_file):
     info_dict = scipy.io.loadmat(info_file)
     # in mat file - pose: [72xT], shape: [10xT], joints2D: [2x24xT]
     # reshape to T as axis 0
-    joints2d = info_dict['joints2D']
+    joints2d = np.transpose(info_dict['joints2D'], (2, 1, 0))
     pose = info_dict['pose']
 
     return joints2d.astype(np.float32), pose
@@ -71,8 +73,8 @@ if __name__ == '__main__':
                 value = read_joints(info_file)
                 shape = value[0].shape
                 assert len(shape) == 3
-                assert shape[0] == 2
                 assert shape[1] == 24
+                assert shape[2] == 2
                 assert (np.amax(value[1]) < 2 * np.pi)
                 assert (np.amin(value[1]) > -2 * np.pi)
         except AssertionError:

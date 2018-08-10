@@ -15,7 +15,7 @@ from pose_3d.pose_model_3d import PoseModel3d
 from pose_3d.data_helpers import dataset_from_filenames
 from pose_3d import config
 
-DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
+DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0_old/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
@@ -63,7 +63,7 @@ if __name__ == '__main__':
                         saver_path=SAVER_PATH,
                         restore_model=True,
                         mesh_loss=True,
-                        reproject_loss=False,
+                        reproject_loss=True,
                         smpl_model=smpl_neutral,
                         discriminator=False)
 
