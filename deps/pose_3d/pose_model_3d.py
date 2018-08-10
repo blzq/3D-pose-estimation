@@ -50,8 +50,12 @@ class PoseModel3d:
                 # placeholders for shape inference
                 # self.in_placeholder = tf.placeholder_with_default(
                 #     self.next_input[0], input_shape)
+                in_joints = tf.gather(
+                    self.next_input[3], 
+                    [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7], 
+                    axis=1)
                 self.in_placeholder = tf.placeholder_with_default(
-                    self.next_input[3], (None, 24, 2))
+                    in_joints, (None, 14, 2))
                 self.outputs = build_model(self.in_placeholder, training)
                 self.mesh_loss = mesh_loss
                 self.reproject_loss = reproject_loss

@@ -35,7 +35,7 @@ input_img_size = (240, 320)
 # 14: RShoulderInner
 # 15: NeckUpper
 # 16: LShoulderOuter
-# 17: RShoulderInner
+# 17: RShoulderOuter
 # 18: LElbow
 # 19: RElbow
 # 20: LWrist

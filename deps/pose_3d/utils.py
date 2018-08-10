@@ -2,8 +2,6 @@
 
 import tensorflow as tf
 import numpy as np
-import pkg_resources
-import scipy.ndimage
 
 from . import config
 from tf_mesh_renderer import mesh_renderer
@@ -58,6 +56,62 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces, lights=None):
         rendered = tf.reduce_mean(rendered[:, :, :, :3], axis=3, keepdims=True)
 
     return rendered
+
+
+def normals_from_mesh(vertices, faces, vertex_faces):
+    """ Compute unit normals given mesh vertices and faces
+    Args:
+        vertices: [batch, vertex_count, 3]
+        faces: [triangle_count, 3]
+        vertex_faces: [vertex_count, max_vertex_order] in the format of 
+                      adjacency list padded with invalid (too large) indices
+    Returns:
+        normals: [batch, vertex_count, 3]
+    """
+    v1_indices, v2_indices, v3_indices = faces[:, 0], faces[:, 1], faces[:, 2]
+    
+    v1 = tf.gather(vertices, v1_indices, axis=1)
+    v2 = tf.gather(vertices, v2_indices, axis=1)
+    v3 = tf.gather(vertices, v3_indices, axis=1)
+
+    face_normals = tf.cross(v2 - v1, v3 - v1)
+    face_normals = tf.nn.l2_normalize(face_normals, axis=1)     
+    
+    normals = tf.gather(face_normals, vertex_faces, axis=1)
+    normals = tf.reduce_sum(normals, axis=2)
+    normals = tf.nn.l2_normalize(normals, axis=2)
+
+    # normals should point outward
+    centered_vertices = vertices - tf.reduce_mean(vertices, axis=1)
+    s = tf.reduce_sum(centered_vertices * normals, axis=1)
+
+    count_s_greater_0 = tf.count_nonzero(tf.greater(s, 0), axis=1)
+    count_s_less_0 = tf.count_nonzero(tf.less(s, 0), axis=1)
+
+    sign = 2 * tf.cast(count_s_greater_0 > count_s_less_0, tf.float32) - 1
+    normals = normals * sign
+
+    return normals
+
+
+def vertex_faces_from_face_vertices(faces):
+    """ From an array of faces specifying the vertices that each face contains
+    of shape [n_faces, 3], get the faces corresponding to each vertex in shape
+    [n_vertices, ...] """
+    n_vertices = np.amax(faces) + 1
+    vertex_faces = [ [] for _ in range(n_vertices) ]
+
+    for face_idx, face in enumerate(faces):
+        vertex_faces[face[0]].append(face_idx)
+        vertex_faces[face[1]].append(face_idx)
+        vertex_faces[face[2]].append(face_idx)
+
+    vertex_orders = list(map(len, vertex_faces))
+    max_vertex_order = max(vertex_orders)
+    # Pad the adjacency list with out of bounds values
+    vertex_faces = np.array([vf + [n_vertices] * (max_vertex_order - vo)
+                            for vf, vo in zip(vertex_faces, vertex_orders)])
+    return vertex_faces
 
 
 def rotate_global_pose(thetas):
