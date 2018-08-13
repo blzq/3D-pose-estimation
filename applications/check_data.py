@@ -10,8 +10,6 @@ import glob
 import numpy as np
 import scipy.io
 
-from pose_3d.data_helpers import heatmaps_to_locations
-
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'

@@ -29,7 +29,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
     # mask = maps_dict['mask']
     # diffs = maps_dict['diffs']
-    # np.logical_and(mask, diffs < 100, out=mask)
+    # np.logical_and(mask, diffs < 100, out=mask)  # < op also excludes NaNs
     heatmaps = heatmaps[:, :, :, :config.n_joints]
         # to shape: time, height, width, n_joints
     # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
@@ -87,14 +87,16 @@ def heatmaps_to_locations(heatmaps_image_stack):
     locations = np.reshape(locations, [hs[0], hs[3], 2])
     # locations: (batch, c, 2 = [y, x])
     locations = locations.astype(np.float32)
+
     # Normalize detection locations by image size
     # Move centre of image to (0, 0) and
     # scale detection locations by shorter side length
-    img_dim = np.array(hs[1:3], dtype=np.float32)
-    img_side_length = np.minimum(img_dim[0], img_dim[1])
-    np.divide(img_dim, 2, out=img_dim)
-    np.subtract(locations, img_dim, out=locations)
-    np.divide(locations, img_side_length, out=locations)
+    # img_dim = np.array(hs[1:3], dtype=np.float32)
+    # img_side_length = np.minimum(img_dim[0], img_dim[1])
+    # np.divide(img_dim, 2, out=img_dim)
+    # np.subtract(locations, img_dim, out=locations)
+    # np.divide(locations, img_side_length, out=locations)
+    
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost

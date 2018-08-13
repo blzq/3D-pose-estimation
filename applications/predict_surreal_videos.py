@@ -9,7 +9,6 @@ import glob
 from tf_pose.estimator import TfPoseEstimator as OpPoseEstimator
 from tf_pose.networks import get_graph_path
 import tf_pose.common
-from pose_3d.data_helpers import heatmaps_to_locations
 
 import numpy as np
 import scipy.io

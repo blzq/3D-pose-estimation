@@ -16,7 +16,7 @@ from tf_pose.estimator import TfPoseEstimator as OpPoseEstimator
 from tf_pose.networks import get_graph_path
 
 from pose_3d.pose_model_3d import PoseModel3d
-from pose_3d.data_helpers import suppress_non_largest_human
+from pose_3d import data_helpers
 from pose_3d import config, utils
 
 from tf_smpl.batch_smpl import SMPL
@@ -29,8 +29,8 @@ def main():
     images_path = os.path.join(__init__.project_path, 'data', 'images')
     in_im = cv2.imread(os.path.join(images_path, 'joints_vis.jpg'))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
-    expect_sz = config.input_img_size
-    expect_aspect = expect_sz[1] / expect_sz[0]
+    img_size = config.input_img_size
+    expect_aspect = img_size[1] / img_size[0]
     in_shape = in_im.shape
     in_aspect = in_shape[1] / in_shape[0]
     if in_aspect != expect_aspect:
@@ -44,26 +44,28 @@ def main():
                                         cv2.BORDER_CONSTANT, None, 0)
         in_im = pad_im
 
-    in_im = cv2.resize(in_im, dsize=(expect_sz[1], expect_sz[0]),
+    in_im = cv2.resize(in_im, dsize=(img_size[1], img_size[0]),
                        interpolation=cv2.INTER_AREA)
 
     tfconfig = tf.ConfigProto()
     tfconfig.gpu_options.allow_growth = True  # pylint: disable=no-member
     with tf.Graph().as_default():
         estimator = OpPoseEstimator(get_graph_path('cmu'),
-                                    target_size=(expect_sz[1], expect_sz[0]),
+                                    target_size=(img_size[1]*2, img_size[0]*2),
                                     tf_config=tfconfig)
     humans = estimator.inference(in_im,
-                                 resize_to_default=True, upsample_size=8)
+                                 resize_to_default=True, upsample_size=4)
     heatmaps = estimator.heatMat[:, :, :config.n_joints]
-    heatmaps = suppress_non_largest_human(humans, heatmaps,
-                                          expect_sz)
+    heatmaps = data_helpers.suppress_non_largest_human(humans, 
+                                                       heatmaps, img_size)
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
-    print(np.sum(heatmaps))
-    exit()
 
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
     inputs = np.concatenate([heatmaps, in_im_3d[np.newaxis]], axis=3)
+
+    # import scipy.io
+    # input_dict = scipy.io.loadmat('/mnt/Data/ben/surreal/SURREAL/data/cmu/test/run0/06_15/06_15_c0001_info')
+    # inputs = np.transpose(input_dict['joints2D'], (2, 1, 0))[0, [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7]][np.newaxis] 
 
     # Visualise argmaxs
     # input_locs = tf.Session().run(utils.soft_argmax_rescaled(heatmaps))
@@ -123,7 +125,7 @@ def main():
                cmap='gray')
     plt.subplot(122)
     plt.imshow(op_out_im)
-    plt.show()
+    # plt.show()
 
 if __name__ == '__main__':
     sys.exit(main())

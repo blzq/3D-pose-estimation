@@ -4,6 +4,7 @@ import pkg_resources
 import tensorflow as tf
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
+from tensorflow.contrib.data.python.ops import prefetching_ops
 import numpy as np
 
 from .network import build_model, build_discriminator
@@ -51,8 +52,8 @@ class PoseModel3d:
                 # self.in_placeholder = tf.placeholder_with_default(
                 #     self.next_input[0], input_shape)
                 in_joints = tf.gather(
-                    self.next_input[3], 
-                    [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7], 
+                    self.next_input[3],
+                    [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7],
                     axis=1)
                 self.in_placeholder = tf.placeholder_with_default(
                     in_joints, (None, 14, 2))
@@ -63,8 +64,9 @@ class PoseModel3d:
                     self.smpl = tf_smpl.batch_smpl.SMPL(smpl_model)
                     faces_path = pkg_resources.resource_filename(
                         tf_smpl.__name__, 'smpl_faces.npy')
-                    self.mesh_faces = tf.constant(np.load(faces_path),
-                                                  dtype=tf.int32)
+                    faces = np.load(faces_path)
+                    self.mesh_faces = tf.constant(faces, dtype=tf.int32)
+                    self.vert_faces = utils.vertex_faces_from_face_verts(faces)
                 if self.discriminator:
                     if training:
                         d_in = tf.concat(
@@ -73,7 +75,8 @@ class PoseModel3d:
                         d_in = self.outputs
                     self.discriminator_outputs = build_discriminator(d_in)
             else:
-                self.in_placeholder = tf.placeholder(tf.float32, input_shape)
+                # self.in_placeholder = tf.placeholder(tf.float32, input_shape)
+                self.in_placeholder = tf.placeholder(tf.float32, (None, 14, 2))
                 self.outputs = build_model(self.in_placeholder, training=False)
 
             self.step = tf.train.get_or_create_global_step()
@@ -232,18 +235,17 @@ class PoseModel3d:
 
                 with tf.variable_scope("render"):
                     # render = utils.render_mesh_verts_cam(
-                    #     gt_meshes, 
+                    #     gt_meshes,
                     #     self.outputs[:, 72:75], self.outputs[:, 75:78],
                     #     tf.atan2(1.0, self.outputs[:, 78]) * 360 / np.pi,
                     #     self.mesh_faces)
-                    render = utils.render_mesh_verts_cam(
-                        gt_meshes, tf.constant([0.0, 0.0, -3.5]),
-                        tf.constant([0., 0., 0.]), 40.0, self.mesh_faces)
-                    render_outs = utils.render_mesh_verts_cam(
-                        out_meshes, tf.constant([0.0, 0.0, -3.5]),
-                        tf.constant([0., 0., 0.]), 40.0, self.mesh_faces)
-                tf.summary.image('silhouettes', render, max_outputs=1)
-                tf.summary.image('output_meshes', render_outs, max_outputs=1)
+                    args = (tf.constant([0.0, -0.5, -3.5]),
+                            tf.constant([0., 0., 0.]), 50.0, self.mesh_faces,
+                            self.vert_faces, tf.constant([0.0, 1.0, -2.5]))
+                    render_gt = utils.render_mesh_verts_cam(gt_meshes, *args)
+                    render_out = utils.render_mesh_verts_cam(out_meshes, *args)
+                tf.summary.image('silhouettes', render_gt, max_outputs=1)
+                tf.summary.image('output_meshes', render_out, max_outputs=1)
 
             return total_loss
 
@@ -254,7 +256,7 @@ class PoseModel3d:
             batch_size = tf.shape(self.discriminator_outputs)[0] / 2
             real_labels = tf.reshape(tf.tile([1, 0], [batch_size]),
                                      [batch_size, 2])
-            fake_labels = tf.reshape(tf.tile([0, 1], [batch_size]), 
+            fake_labels = tf.reshape(tf.tile([0, 1], [batch_size]),
                                      [batch_size, 2])
             disc_loss = tf.losses.softmax_cross_entropy(
                 onehot_labels=tf.concat([real_labels, fake_labels], axis=0),
@@ -266,7 +268,7 @@ class PoseModel3d:
             disc_enc_loss = tf.losses.softmax_cross_entropy(
                 onehot_labels=real_labels,
                 logits=disc_pred_out, weights=config.disc_loss_scale)
-            tf.summary.scalar('discriminator_loss', disc_enc_loss, 
+            tf.summary.scalar('discriminator_loss', disc_enc_loss,
                               family='losses')
             return disc_loss, disc_enc_loss
 
@@ -277,7 +279,7 @@ class PoseModel3d:
             self.dataset = self.dataset.batch(batch_size)
             self.dataset = self.dataset.prefetch(16)
             # self.dataset = self.dataset.apply(
-            #     tf.contrib.data.copy_to_device("/gpu:0")).prefetch(1)
+            #     prefetching_ops.copy_to_device("/gpu:0")).prefetch(1)
             iterator = self.dataset.make_initializable_iterator()
             train_handle = self.sess.run(iterator.string_handle())
 

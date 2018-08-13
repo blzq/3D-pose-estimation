@@ -10,11 +10,14 @@ from tf_perspective_projection import project
 import tf_pose.common
 
 
-def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces, lights=None):
+def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces, 
+                          vert_faces=None, lights=None):
     batch_size = tf.shape(verts)[0]
 
-    # TODO: Calculate this properly for real colour
-    normals = tf.nn.l2_normalize(verts, axis=1)
+    if vert_faces is None:
+        normals = tf.zeros_like(verts)
+    else:
+        normals = normals_from_mesh(verts, faces, vert_faces)
 
     if cam_pos.get_shape().as_list() == [3]:
         cam_pos = tf.reshape(tf.tile(cam_pos, [batch_size]), [batch_size, 3])
@@ -94,10 +97,12 @@ def normals_from_mesh(vertices, faces, vertex_faces):
     return normals
 
 
-def vertex_faces_from_face_vertices(faces):
+def vertex_faces_from_face_verts(faces):
     """ From an array of faces specifying the vertices that each face contains
     of shape [n_faces, 3], get the faces corresponding to each vertex in shape
-    [n_vertices, ...] """
+    [n_vertices, ...] in adjacency list form. Each list is then padded with 
+    an out of bounds (invalid) vertex index to form the array. This is since
+    the GPU version of tf.gather will return 0s for out-of-bounds indices."""
     n_vertices = np.amax(faces) + 1
     vertex_faces = [ [] for _ in range(n_vertices) ]
 
