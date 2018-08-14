@@ -13,15 +13,15 @@ from . import config
 
 def build_model(inputs, training: bool):
     with tf.variable_scope('encoder'):
-        # with tf.variable_scope("preprocess_heatmaps"):
-        #     inputs = tf.check_numerics(inputs, "inputs not finite")
-        #     input_rgb = inputs[:, :, :, config.n_joints:]
-        #     input_heatmaps = inputs[:, :, :, :config.n_joints]
-        #     input_heatmaps = utils.gaussian_blur(input_heatmaps)
-        #     inputs = tf.concat([input_heatmaps, input_rgb], axis=3)
+        with tf.variable_scope("preprocess_heatmaps"):
+            inputs = tf.check_numerics(inputs, "inputs not finite")
+            input_rgb = inputs[:, :, :, config.n_joints:]
+            input_heatmaps = inputs[:, :, :, :config.n_joints]
+            input_heatmaps = utils.gaussian_blur(input_heatmaps)
+            inputs = tf.concat([input_heatmaps, input_rgb], axis=3)
 
-        #     heatmaps_sum = tf.reduce_sum(input_heatmaps, axis=3, keepdims=True)
-        #     tf.summary.image("input_heatmap", tf.abs(heatmaps_sum * input_rgb))
+            heatmaps_sum = tf.reduce_sum(input_heatmaps, axis=3, keepdims=True)
+            tf.summary.image("input_heatmap", tf.abs(heatmaps_sum * input_rgb))
 
         # with tf.variable_scope('init_conv'):
         #     in_channels = inputs.get_shape().as_list()[-1]
@@ -33,15 +33,15 @@ def build_model(inputs, training: bool):
         #     mn = _mobilenetv2(conv_relu1, training, alpha=1.4)
 
         with tf.variable_scope('init_dense'):
-            # input_locations = utils.soft_argmax_rescaled(input_heatmaps)
-            # features_flat = tf.layers.flatten(mn)
-            # locations_flat = tf.layers.flatten(input_locations)
-            # in_concat = tf.concat([features_flat, locations_flat], axis=1)
+            input_locations = utils.soft_argmax_rescaled(input_heatmaps)
+            locations_flat = tf.layers.flatten(input_locations)
 
+            # features_flat = tf.layers.flatten(mn)
+            # in_concat = tf.concat([features_flat, locations_flat], axis=1)
             # l_units = in_concat.get_shape().as_list()[1]
-            locations_flat = tf.layers.flatten(inputs)
             l_units = 1806
             in_dense = tf.layers.dense(locations_flat, l_units)
+
             in_bn = tf.layers.batch_normalization(in_dense, training=training)
             in_relu = tf.nn.relu(in_bn)
 

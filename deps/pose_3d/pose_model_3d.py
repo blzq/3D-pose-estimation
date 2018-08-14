@@ -49,14 +49,14 @@ class PoseModel3d:
                     self.dataset.output_types, self.dataset.output_shapes)
                 self.next_input = iterator.get_next()
                 # placeholders for shape inference
-                # self.in_placeholder = tf.placeholder_with_default(
-                #     self.next_input[0], input_shape)
-                in_joints = tf.gather(
-                    self.next_input[3],
-                    [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7],
-                    axis=1)
                 self.in_placeholder = tf.placeholder_with_default(
-                    in_joints, (None, 14, 2))
+                    self.next_input[0], input_shape)
+                # in_joints = tf.gather(
+                #     self.next_input[3],
+                #     [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7],
+                #     axis=1)
+                # self.in_placeholder = tf.placeholder_with_default(
+                #     in_joints, (None, 14, 2))
                 self.outputs = build_model(self.in_placeholder, training)
                 self.mesh_loss = mesh_loss
                 self.reproject_loss = reproject_loss
@@ -66,7 +66,8 @@ class PoseModel3d:
                         tf_smpl.__name__, 'smpl_faces.npy')
                     faces = np.load(faces_path)
                     self.mesh_faces = tf.constant(faces, dtype=tf.int32)
-                    self.vert_faces = utils.vertex_faces_from_face_verts(faces)
+                    # self.vert_faces = tf.constant(
+                    #     utils.vertex_faces_from_face_verts(faces))
                 if self.discriminator:
                     if training:
                         d_in = tf.concat(
@@ -75,8 +76,8 @@ class PoseModel3d:
                         d_in = self.outputs
                     self.discriminator_outputs = build_discriminator(d_in)
             else:
-                # self.in_placeholder = tf.placeholder(tf.float32, input_shape)
-                self.in_placeholder = tf.placeholder(tf.float32, (None, 14, 2))
+                self.in_placeholder = tf.placeholder(tf.float32, input_shape)
+                # self.in_placeholder = tf.placeholder(tf.float32, (None, 14, 2))
                 self.outputs = build_model(self.in_placeholder, training=False)
 
             self.step = tf.train.get_or_create_global_step()
@@ -234,14 +235,10 @@ class PoseModel3d:
                 total_loss += cam_loss + cam_loss_not_positive
 
                 with tf.variable_scope("render"):
-                    # render = utils.render_mesh_verts_cam(
-                    #     gt_meshes,
-                    #     self.outputs[:, 72:75], self.outputs[:, 75:78],
-                    #     tf.atan2(1.0, self.outputs[:, 78]) * 360 / np.pi,
-                    #     self.mesh_faces)
+                    # fov = tf.atan2(1.0, self.outputs[:, 78]) * 360 / np.pi
                     args = (tf.constant([0.0, -0.5, -3.5]),
                             tf.constant([0., 0., 0.]), 50.0, self.mesh_faces,
-                            self.vert_faces, tf.constant([0.0, 1.0, -2.5]))
+                            None, None)
                     render_gt = utils.render_mesh_verts_cam(gt_meshes, *args)
                     render_out = utils.render_mesh_verts_cam(out_meshes, *args)
                 tf.summary.image('silhouettes', render_gt, max_outputs=1)

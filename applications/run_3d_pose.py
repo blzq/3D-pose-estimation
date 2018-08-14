@@ -56,16 +56,12 @@ def main():
     humans = estimator.inference(in_im,
                                  resize_to_default=True, upsample_size=4)
     heatmaps = estimator.heatMat[:, :, :config.n_joints]
-    heatmaps = data_helpers.suppress_non_largest_human(humans, 
+    heatmaps = data_helpers.suppress_non_largest_human(humans,
                                                        heatmaps, img_size)
     heatmaps = heatmaps[np.newaxis]  # add "batch" axis
 
     in_im_3d = cv2.normalize(in_im, None, 0, 1, cv2.NORM_MINMAX)
     inputs = np.concatenate([heatmaps, in_im_3d[np.newaxis]], axis=3)
-
-    # import scipy.io
-    # input_dict = scipy.io.loadmat('/mnt/Data/ben/surreal/SURREAL/data/cmu/test/run0/06_15/06_15_c0001_info')
-    # inputs = np.transpose(input_dict['joints2D'], (2, 1, 0))[0, [15, 12, 17, 19, 21, 16, 18, 20, 2, 5, 8, 1, 4, 7]][np.newaxis] 
 
     # Visualise argmaxs
     # input_locs = tf.Session().run(utils.soft_argmax_rescaled(heatmaps))
@@ -121,11 +117,11 @@ def main():
 
     op_out_im = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
     plt.subplot(121)
-    plt.imshow(np.sum(heatmaps[0][:, :, :config.n_joints], axis=2), 
+    plt.imshow(np.sum(heatmaps[0][:, :, :config.n_joints], axis=2),
                cmap='gray')
     plt.subplot(122)
     plt.imshow(op_out_im)
-    # plt.show()
+    plt.show()
 
 if __name__ == '__main__':
     sys.exit(main())

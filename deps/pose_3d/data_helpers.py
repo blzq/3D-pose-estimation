@@ -16,7 +16,7 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
     dataset = dataset.apply(tf.contrib.data.parallel_interleave(
         lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(
             tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
-                             [tf.float32, tf.float32, 
+                             [tf.float32, tf.float32,
                               tf.float32, tf.float32]))),
         cycle_length=12, block_length=1, sloppy=True,
         buffer_output_elements=32, prefetch_input_elements=4))
@@ -27,9 +27,10 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
 def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
-    # mask = maps_dict['mask']
-    # diffs = maps_dict['diffs']
-    # np.logical_and(mask, diffs < 100, out=mask)  # < op also excludes NaNs
+    mask = np.squeeze(maps_dict['mask'])
+    diffs = np.squeeze(maps_dict['diffs'])
+    # diffs can contain NaNs but the '<' op should exclude them
+    # np.logical_and(mask, diffs < 100, out=mask)
     heatmaps = heatmaps[:, :, :, :config.n_joints]
         # to shape: time, height, width, n_joints
     # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
@@ -45,20 +46,21 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     # Flip 2D GT horizontally because image and 3D GT are flipped in SURREAL
     joints2d[:, :, 0] = img_size_x - joints2d[:, :, 0]
 
+    # Make sure to sort the frames: VERY IMPORTANT!
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
-               for f in glob.glob(frames_path + b'/f*.jpg') ]
+               for f in sorted(glob.glob(frames_path + b'/f*.jpg')) ]
     frames = np.array(frames, dtype=np.float32)
     frames = [ cv2.normalize(frame, None, 0, 1, cv2.NORM_MINMAX)
                for frame in frames ]
     # Flip image horizontally because image and 3D GT are flipped in SURREAL
     frames = np.flip(frames, axis=2)
 
-    # heatmaps = heatmaps[mask]
-    # frames = frames[mask]
-    # poses = poses[mask]
-    # shapes = shapes[mask]
-    # joints2d = joints2d[mask]
-    
+    heatmaps = heatmaps[mask]
+    frames = frames[mask]
+    poses = poses[mask]
+    shapes = shapes[mask]
+    joints2d = joints2d[mask]
+
     concat = np.concatenate([heatmaps, frames], axis=3)
     return concat, poses, shapes, joints2d.astype(np.float32)
 
@@ -96,7 +98,7 @@ def heatmaps_to_locations(heatmaps_image_stack):
     # np.divide(img_dim, 2, out=img_dim)
     # np.subtract(locations, img_dim, out=locations)
     # np.divide(locations, img_side_length, out=locations)
-    
+
     locations_with_vals = np.concatenate([locations, max_val], axis=2)
 
     # Maybe don't want to do this part because information for camera is lost

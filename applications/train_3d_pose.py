@@ -15,7 +15,7 @@ from pose_3d.pose_model_3d import PoseModel3d
 from pose_3d.data_helpers import dataset_from_filenames
 from pose_3d import config
 
-DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0_old/'
+DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose'
 SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 
@@ -30,11 +30,11 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames:
+    for basename in basenames[:basenames.index('ung_111_24')]:
         # each basename is one dir corresponding to one type of action
         one_data_dir = os.path.join(dataset_dir, basename)
-        one_dir_maps_files = glob.glob(
-            os.path.join(one_data_dir, basename + '_c*_maps.mat'))
+        one_dir_maps_files = sorted(glob.glob(
+            os.path.join(one_data_dir, basename + '_c*_maps.mat')))
         # only get the info file and frames for heatmaps that exist
         one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat',
                                  one_dir_maps_files)

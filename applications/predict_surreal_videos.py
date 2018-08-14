@@ -19,14 +19,14 @@ import matplotlib.pyplot as plt
 
 def main(surreal_path):
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = True  # pylint: disable=no-member
     estimator = OpPoseEstimator(get_graph_path('cmu'),
                                 target_size=(320*2, 240*2), tf_config=config)
     base_path = os.path.join(surreal_path, 'data', 'cmu', 'train')
     for run in ['run0']:  # + ['run1', 'run2']:
         run_path = os.path.join(base_path, run)
         dir_names = sorted(os.listdir(run_path))
-        for dir_name in dir_names:
+        for dir_name in dir_names[dir_names.index('ung_111_38'):]:
             dir_path = os.path.join(run_path, dir_name)
             one_dir_frames_path = sorted(glob.glob(
                 os.path.join(dir_path, dir_name + '*_frames')))
@@ -40,7 +40,7 @@ def process_frames(in_path, estimator):
     info_filename = basename + '_info.mat'
     info_dict = scipy.io.loadmat(info_filename)
     joints2d = np.transpose(info_dict['joints2D'], (2, 1, 0)) # T, 24, 2
-    frames_files = [ os.path.join(in_path, f) 
+    frames_files = [ os.path.join(in_path, f)
                      for f in sorted(os.listdir(in_path)) ]
     assert len(frames_files) == joints2d.shape[0]
 
@@ -83,7 +83,7 @@ def process_frames(in_path, estimator):
 
     out_mat_filename = basename + '_maps'
     print(out_mat_filename)
-    scipy.io.savemat(out_mat_filename, out_dict, 
+    scipy.io.savemat(out_mat_filename, out_dict,
                      do_compression=True, appendmat=True)
 
 if __name__ == '__main__':

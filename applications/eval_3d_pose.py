@@ -11,7 +11,7 @@ import tensorflow as tf
 import numpy as np
 
 from pose_3d.pose_model_3d import PoseModel3d
-from pose_3d.data_helpers import dataset_from_filenames
+from pose_3d.data_helpers import dataset_from_filenames, read_maps_poses_images
 from pose_3d import config
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'

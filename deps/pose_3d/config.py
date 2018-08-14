@@ -17,6 +17,7 @@ n_joints_smpl = 24  # SMPL model number of joints
 
 input_img_size = (240, 320)
 
+# 2D joint order and locations for various datasets
 # SMPL model joints order:
 #  0: CentreHip (Global rotation)
 #  1: LHip
@@ -79,3 +80,19 @@ input_img_size = (240, 320)
 # 11: Left wrist
 # 12: Neck
 # 13: Head top
+
+# H36M joints order (14 joints in TFRecords):
+#  0: RAnkle
+#  1: RKnee
+#  2: RHip
+#  3: LHip
+#  4: LKnee
+#  5: LAnkle
+#  6: RWrist
+#  7: RElbow
+#  8: RShoulder
+#  9: LShoulder
+# 10: LElbow
+# 11: LWrist
+# 12: Neck
+# 13: Head

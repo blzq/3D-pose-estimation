@@ -10,14 +10,9 @@ from tf_perspective_projection import project
 import tf_pose.common
 
 
-def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces, 
+def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
                           vert_faces=None, lights=None):
     batch_size = tf.shape(verts)[0]
-
-    if vert_faces is None:
-        normals = tf.zeros_like(verts)
-    else:
-        normals = normals_from_mesh(verts, faces, vert_faces)
 
     if cam_pos.get_shape().as_list() == [3]:
         cam_pos = tf.reshape(tf.tile(cam_pos, [batch_size]), [batch_size, 3])
@@ -39,11 +34,13 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
     cam_up.set_shape(cam_pos.shape)
 
     diffuse = tf.ones_like(verts, dtype=tf.float32)
-    if lights is None:
+    if vert_faces is None or lights is None:
         light_pos = tf.zeros([batch_size, 1, 3])
+        normals = tf.zeros_like(verts)
     else:
-        light_pos = tf.reshape(tf.tile(lights, [batch_size, 1]),
+        light_pos = tf.reshape(tf.tile(lights, [batch_size]),
                                [batch_size, -1, 3])
+        normals = normals_from_mesh(verts, faces, vert_faces)
     light_intensities = tf.ones_like(light_pos, dtype=tf.float32)
     img_height, img_width = config.input_img_size
 
@@ -66,33 +63,34 @@ def normals_from_mesh(vertices, faces, vertex_faces):
     Args:
         vertices: [batch, vertex_count, 3]
         faces: [triangle_count, 3]
-        vertex_faces: [vertex_count, max_vertex_order] in the format of 
+        vertex_faces: [vertex_count, max_vertex_order] in the format of
                       adjacency list padded with invalid (too large) indices
     Returns:
         normals: [batch, vertex_count, 3]
     """
     v1_indices, v2_indices, v3_indices = faces[:, 0], faces[:, 1], faces[:, 2]
-    
+
     v1 = tf.gather(vertices, v1_indices, axis=1)
     v2 = tf.gather(vertices, v2_indices, axis=1)
     v3 = tf.gather(vertices, v3_indices, axis=1)
 
     face_normals = tf.cross(v2 - v1, v3 - v1)
-    face_normals = tf.nn.l2_normalize(face_normals, axis=1)     
-    
+    face_normals = tf.nn.l2_normalize(face_normals, axis=1)
+
     normals = tf.gather(face_normals, vertex_faces, axis=1)
     normals = tf.reduce_sum(normals, axis=2)
     normals = tf.nn.l2_normalize(normals, axis=2)
 
     # normals should point outward
-    centered_vertices = vertices - tf.reduce_mean(vertices, axis=1)
+    centered_vertices = vertices - tf.reduce_mean(vertices,
+                                                  axis=1, keepdims=True)
     s = tf.reduce_sum(centered_vertices * normals, axis=1)
 
     count_s_greater_0 = tf.count_nonzero(tf.greater(s, 0), axis=1)
     count_s_less_0 = tf.count_nonzero(tf.less(s, 0), axis=1)
 
     sign = 2 * tf.cast(count_s_greater_0 > count_s_less_0, tf.float32) - 1
-    normals = normals * sign
+    normals = normals * tf.reshape(sign, [-1, 1, 1])
 
     return normals
 
@@ -100,7 +98,7 @@ def normals_from_mesh(vertices, faces, vertex_faces):
 def vertex_faces_from_face_verts(faces):
     """ From an array of faces specifying the vertices that each face contains
     of shape [n_faces, 3], get the faces corresponding to each vertex in shape
-    [n_vertices, ...] in adjacency list form. Each list is then padded with 
+    [n_vertices, ...] in adjacency list form. Each list is then padded with
     an out of bounds (invalid) vertex index to form the array. This is since
     the GPU version of tf.gather will return 0s for out-of-bounds indices."""
     n_vertices = np.amax(faces) + 1
