@@ -30,15 +30,15 @@ if __name__ == '__main__':
     maps_files = []
     info_files = []
     frames_paths = []
-    for basename in basenames[:basenames.index('ung_111_24')]:
+    for basename in basenames[:basenames.index('ung_140_09')]:
         # each basename is one dir corresponding to one type of action
         one_data_dir = os.path.join(dataset_dir, basename)
         one_dir_maps_files = sorted(glob.glob(
             os.path.join(one_data_dir, basename + '_c*_maps.mat')))
         # only get the info file and frames for heatmaps that exist
-        one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat',
+        one_dir_info_files = map(lambda fn: fn[:-len('_maps.mat')]+'_info.mat',
                                  one_dir_maps_files)
-        one_dir_frames_paths = map(lambda fn: fn[:-9] + '_frames',
+        one_dir_frames_paths = map(lambda fn: fn[:-len('_maps.mat')]+'_frames',
                                    one_dir_maps_files)
         maps_files.extend(one_dir_maps_files)
         info_files.extend(one_dir_info_files)

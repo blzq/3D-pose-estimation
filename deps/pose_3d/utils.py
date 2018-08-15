@@ -161,7 +161,7 @@ def add_axis_angle_rotations(rv1, rv2):
 def soft_argmax(heatmaps):
     # https://arxiv.org/pdf/1603.09114.pdf - equation 7
     # use softmax(heatmaps) * indices as differentiable replacement for argmax
-    strength = 100.0  # Tunable parameter for softmax; higher -> sharper peak
+    strength = 1000.0  # Tunable parameter for softmax; higher -> sharper peak
     shape = tf.shape(heatmaps)
     b, h, w, c = shape[0], shape[1], shape[2], shape[3]
     # x_ind = tf.reshape(tf.tile(tf.range(w)[..., tf.newaxis], [h, 1]), [h, w])

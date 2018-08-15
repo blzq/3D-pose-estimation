@@ -26,7 +26,7 @@ def main(surreal_path):
     for run in ['run0']:  # + ['run1', 'run2']:
         run_path = os.path.join(base_path, run)
         dir_names = sorted(os.listdir(run_path))
-        for dir_name in dir_names[dir_names.index('ung_111_38'):]:
+        for dir_name in dir_names:
             dir_path = os.path.join(run_path, dir_name)
             one_dir_frames_path = sorted(glob.glob(
                 os.path.join(dir_path, dir_name + '*_frames')))
@@ -44,11 +44,7 @@ def process_frames(in_path, estimator):
                      for f in sorted(os.listdir(in_path)) ]
     assert len(frames_files) == joints2d.shape[0]
 
-    humans = []
-    visibilities = []
-    heat_mats = []
-    diffs = []
-    mask = []
+    humans, visibilities, heat_mats, diffs, mask = [], [], [], [], []
     for idx, frame_file in enumerate(frames_files):
         color_im = cv2.imread(frame_file)
         color_im = cv2.cvtColor(color_im, cv2.COLOR_BGR2RGB)
