@@ -92,7 +92,7 @@ if __name__ == '__main__':
             diffs.append(diff)
             humans.append(human)
             visibilities.append(visibility)
-            heat_mats.append(estimator.heatMat)
+            heat_mats.append(estimator.heatMat[:, :, :18])
 
         # Stacking on last axis makes .mat file smaller compared to first axis
         out_dict = {}

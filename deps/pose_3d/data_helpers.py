@@ -65,6 +65,40 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     return concat, poses, shapes, joints2d.astype(np.float32)
 
 
+def read_h36m_tfrecord(record):
+    dict_keys = {'image/center': tf.FixedLenFeature([2], tf.int64),
+                 'image/encoded': tf.FixedLenFeature([], tf.string),
+                 'image/filename': tf.FixedLenFeature([1], tf.string),
+                 'image/format': tf.FixedLenFeature([1], tf.string),
+                 'image/height': tf.FixedLenFeature([1], tf.int64),
+                 'image/visibility': tf.FixedLenFeature([14], tf.int64),
+                 'image/width': tf.FixedLenFeature([1], tf.int64),
+                 'image/x': tf.FixedLenFeature([14], tf.float32),
+                 'image/y': tf.FixedLenFeature([14], tf.float32),
+                 'meta/crop_pt': tf.FixedLenFeature([2], tf.int64),
+                 'meta/has_3d': tf.FixedLenFeature([1], tf.int64),
+                 'meta/scale_factors': tf.FixedLenFeature([2], tf.float32),
+                 'mosh/gt3d': tf.FixedLenFeature([14 * 3], tf.float32),
+                 'mosh/pose': tf.FixedLenFeature([72], tf.float32),
+                 'mosh/shape': tf.FixedLenFeature([10], tf.float32)}
+
+    f = tf.parse_single_example(record, dict_keys)
+
+    poses = f['mosh/pose']
+    shapes = f['mosh/shape']
+    joints2d = tf.stack([f['image/x'], f['image/y']], axis=1)
+    img_raw = f['image/encoded']
+    img = tf.image.decode_jpeg(img_raw)
+    return img, joints2d, poses, shapes
+
+
+def read_h36m_maps(maps_file):
+    maps_dict = scipy.io.loadmat(maps_file)
+    heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
+    heatmaps = heatmaps[:, :, :, :config.n_joints]
+    return heatmaps
+
+
 def heatmaps_to_locations(heatmaps_image_stack):
     # Currently unused in favour of utils.soft_argmax_rescaled
     heatmaps = heatmaps_image_stack[:, :, :, :config.n_joints]

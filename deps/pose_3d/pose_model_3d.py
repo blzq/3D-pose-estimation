@@ -27,7 +27,7 @@ class PoseModel3d:
                  mesh_loss=True,
                  smpl_model=None,
                  discriminator=False):
-        self.graph = graph if graph != None else tf.get_default_graph()
+        self.graph = graph if graph is not None else tf.get_default_graph()
         with self.graph.as_default():
             tfconf = tf.ConfigProto()
             tfconf.gpu_options.allow_growth = True  # pylint: disable=no-member
