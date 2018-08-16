@@ -19,40 +19,49 @@ def build_model(inputs, training: bool):
             input_heatmaps = utils.gaussian_blur(input_heatmaps)
             inputs = tf.concat([input_heatmaps, input_rgb], axis=3)
 
-            heatmaps_sum = tf.reduce_sum(input_heatmaps, axis=3, keepdims=True)
-            tf.summary.image("input_heatmap", tf.abs(heatmaps_sum * input_rgb))
+            # heatmaps_sum = tf.reduce_sum(input_heatmaps, axis=3, keepdims=True)
+            # tf.summary.image("input_heatmap", tf.abs(heatmaps_sum * input_rgb))
 
-        # with tf.variable_scope('init_conv'):
-        #     in_channels = inputs.get_shape().as_list()[-1]
-        #     init_conv1 = tf.layers.conv2d(inputs, in_channels, [3, 3])
-        #     bn1 = tf.layers.batch_normalization(init_conv1, training=training)
-        #     conv_relu1 = tf.nn.relu(bn1)
+        with tf.variable_scope('init_conv'):
+            in_channels = inputs.get_shape().as_list()[-1]
+            init_conv1 = tf.layers.conv2d(inputs, in_channels, [3, 3])
+            bn1 = tf.layers.batch_normalization(init_conv1, training=training)
+            conv_relu1 = tf.nn.relu(bn1)
 
-        # with tf.variable_scope('mobilenetv2'):
-        #     mn = _mobilenetv2(conv_relu1, training, alpha=1.4)
+        with tf.variable_scope('mobilenetv2'):
+            mn = _mobilenetv2(conv_relu1, training, alpha=1.0)
 
-        with tf.variable_scope('init_dense'):
+        with tf.variable_scope('init_concat'):
             input_locations = utils.soft_argmax_rescaled(input_heatmaps)
             locations_flat = tf.layers.flatten(input_locations)
 
-            # features_flat = tf.layers.flatten(mn)
-            # in_concat = tf.concat([features_flat, locations_flat], axis=1)
-            # l_units = in_concat.get_shape().as_list()[1]
-            l_units = 1806
-            in_dense = tf.layers.dense(locations_flat, l_units)
-
+            features_flat = tf.layers.flatten(mn)
+            in_concat = tf.concat([features_flat, locations_flat], axis=1)
+            l_units = in_concat.get_shape().as_list()[1]
+            
+        with tf.variable_scope('bilinear_blocks'):
+            in_dense = tf.layers.dense(in_concat, l_units)
             in_bn = tf.layers.batch_normalization(in_dense, training=training)
             in_relu = tf.nn.relu(in_bn)
-
-        with tf.variable_scope('bilinear_blocks'):
             bl1 = _bilinear_res_block(in_relu, l_units, training,
                                       input_activation=False)
             bl2 = _bilinear_res_block(bl1, l_units, training)
             bl3 = _bilinear_res_block(bl2, l_units, training)
             bl4 = _bilinear_res_block(bl3, l_units, training)
 
+        with tf.variable_scope('camera_blocks'):
+            cam_units = l_units // 4
+            in_cam_concat = tf.stop_gradient(in_concat)
+            in_cam_d = tf.layers.dense(in_cam_concat, cam_units)
+            cam_bn = tf.layers.batch_normalization(in_cam_d, training=training)
+            in_cam_relu = tf.nn.relu(cam_bn)
+            bl1_cam = _bilinear_res_block(in_cam_relu, cam_units, training)
+            bl2_cam = _bilinear_res_block(bl1_cam, cam_units, training)
+
         with tf.variable_scope('out_fc'):
-            out = tf.layers.dense(bl2, 79) # 24*3 rotations + 7 cam params
+            out_pose = tf.layers.dense(bl4, 72) # 24*3 rotations
+            out_cam = tf.layers.dense(bl2_cam, 7) # f x 1, t x 3, r x 3
+            out = tf.concat([out_pose, out_cam], axis=1)
 
     return out
 

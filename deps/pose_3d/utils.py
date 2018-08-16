@@ -34,22 +34,23 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
 
     diffuse = tf.ones_like(verts, dtype=tf.float32)
     if vert_faces is None or lights is None:
-        light_pos = tf.zeros([batch_size, 1, 3])
+        lights = tf.zeros([batch_size, 1, 3])
         normals = tf.zeros_like(verts)
     else:
-        light_pos = tf.reshape(tf.tile(lights, [batch_size]),
-                               [batch_size, -1, 3])
+        if lights.get_shape().as_list() == [3]:
+            lights = tf.reshape(tf.tile(lights, [batch_size]),
+                                [batch_size, -1, 3])
         normals = normals_from_mesh(verts, faces, vert_faces)
-    light_intensities = tf.ones_like(light_pos, dtype=tf.float32)
+    light_intensities = tf.ones_like(lights, dtype=tf.float32)
     img_height, img_width = config.input_img_size
 
     rendered = mesh_renderer.mesh_renderer(
         verts, faces, normals, diffuse, cam_pos, cam_lookat, cam_up,
-        light_pos, light_intensities, img_width, img_height,
+        lights, light_intensities, img_width, img_height,
         specular_colors=None, shininess_coefficients=None, ambient_color=None,
         fov_y=cam_f, near_clip=0.01, far_clip=10.0)
 
-    if lights is None:
+    if lights is None or vert_faces is None:
         rendered = rendered[:, :, :, 3, tf.newaxis]
     else:
         rendered = tf.reduce_mean(rendered[:, :, :, :3], axis=3, keepdims=True)
@@ -196,13 +197,13 @@ def soft_argmax_rescaled(heatmaps):
 
     # Maybe don't want to do this part because information for camera is lost
     # Normalize centre of person as middle of left and right hips
-    rhip_idx = tf_pose.common.CocoPart.RHip.value
-    lhip_idx = tf_pose.common.CocoPart.LHip.value
-    centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
-    locations = locations - centres[:, tf.newaxis]
+    # rhip_idx = tf_pose.common.CocoPart.RHip.value
+    # lhip_idx = tf_pose.common.CocoPart.LHip.value
+    # centres = (locations[:, rhip_idx, :] + locations[:, lhip_idx, :]) / 2
+    # locations = locations - centres[:, tf.newaxis]
     # Normalize joint locations to [-1, 1] in x and y
-    max_extents = tf.reduce_max(tf.abs(locations), axis=[1, 2], keepdims=True)
-    locations = locations / max_extents
+    # max_extents = tf.reduce_max(tf.abs(locations), axis=[1, 2], keepdims=True)
+    # locations = locations / max_extents
 
     return tf.concat([locations, maxes[..., tf.newaxis]], axis=2)
 

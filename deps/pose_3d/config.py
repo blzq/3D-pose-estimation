@@ -11,7 +11,7 @@ reg_loss_scale = 1.0
 reg_joint_limit = pi * 2.0
 disc_loss_scale = 2
 reproj_loss_scale = 0  # 0.000016
-cam_loss_scale = 0  # 0.000016
+cam_loss_scale = 0.000016
 n_joints = 14  # COCO number of joints (not including background, eyes, ears)
 n_joints_smpl = 24  # SMPL model number of joints
 
@@ -96,3 +96,25 @@ input_img_size = (240, 320)
 # 11: LWrist
 # 12: Neck
 # 13: Head
+
+# Output order of tf_smpl (3D coco joints):
+# Superset of LSP joints order
+#  0: RAnkle
+#  1: RKnee
+#  2: RHip
+#  3: LHip
+#  4: LKnee
+#  5: LAnkle
+#  6: RWrist
+#  7: RElbow
+#  8: RShoulder
+#  9: LShoulder
+# 10: LElbow
+# 11: LWrist
+# 12: Neck
+# 13: Head (top of)
+# 14: Nose
+# 15: LEye
+# 16: REye
+# 17: REar
+# 18: LEar
