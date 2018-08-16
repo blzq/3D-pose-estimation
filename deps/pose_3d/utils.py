@@ -5,7 +5,6 @@ import numpy as np
 
 from . import config
 from tf_mesh_renderer import mesh_renderer
-import tf_smpl
 from tf_perspective_projection import project
 import tf_pose.common
 

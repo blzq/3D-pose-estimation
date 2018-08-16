@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+
 import __init__
 
 import sys
@@ -14,7 +15,6 @@ import numpy as np
 import scipy.io
 import cv2
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 
 def main(surreal_path):

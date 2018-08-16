@@ -3,16 +3,14 @@
 
 import __init__
 
-import sys
 import os
 import glob
 import random
 
 import tensorflow as tf
-import numpy as np
 
 from pose_3d.pose_model_3d import PoseModel3d
-from pose_3d.data_helpers import dataset_from_filenames
+from pose_3d.data_helpers import dataset_from_filenames_surreal
 from pose_3d import config
 
 DATASET_PATH = '/mnt/Data/ben/surreal/SURREAL/data/cmu/train/run0/'
@@ -53,7 +51,8 @@ if __name__ == '__main__':
 
     graph = tf.Graph()
     with graph.as_default():
-        dataset = dataset_from_filenames(maps_files, info_files, frames_paths)
+        dataset = dataset_from_filenames_surreal(
+            maps_files, info_files, frames_paths)
 
     pm_3d = PoseModel3d((None, 240, 320, 3 + config.n_joints),
                         graph,

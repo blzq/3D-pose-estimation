@@ -1,4 +1,5 @@
-import os
+# -*- coding: utf-8 -*-
+
 import glob
 import scipy.io
 import cv2
@@ -9,22 +10,39 @@ import tf_pose.common
 from . import config
 
 
-def dataset_from_filenames(maps_files, info_files, frames_paths):
+def dataset_from_filenames_surreal(maps_files, info_files, frames_paths):
     dataset = tf.data.Dataset.from_tensor_slices(
             (maps_files, info_files, frames_paths))
 
-    dataset = dataset.apply(tf.contrib.data.parallel_interleave(
-        lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(
-            tuple(tf.py_func(read_maps_poses_images, [mf, pf, fp],
-                             [tf.float32, tf.float32,
-                              tf.float32, tf.float32]))),
+    dataset = dataset.apply(
+        tf.contrib.data.parallel_interleave(
+            lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(tuple(
+                tf.py_func(read_maps_poses_images_surreal,
+                           [mf, pf, fp],
+                           [tf.float32, tf.float32, tf.float32, tf.float32],
+                           stateful=False))),
         cycle_length=12, block_length=1, sloppy=True,
         buffer_output_elements=32, prefetch_input_elements=4))
 
     return dataset
 
 
-def read_maps_poses_images(maps_file, info_file, frames_path):
+def dataset_from_filenames_h36m(maps_files, record_files):
+    record_dataset = tf.data.TFRecordDataset(record_files)
+    record_dataset = record_dataset.map(read_tfrecord_h36m)
+
+    heatmaps_dataset = tf.data.Dataset.from_tensor_slices(maps_files)
+    heatmaps_dataset = heatmaps_dataset.flat_map(
+        lambda mf: tf.data.Dataset.from_tensor_slices(
+            tf.py_func(read_maps_h36m, [mf], tf.float32, stateful=False)))
+    heatmaps_dataset = heatmaps_dataset.prefetch(1)
+
+    h36m_dataset = tf.data.Dataset.zip((heatmaps_dataset, record_dataset))
+    h36m_dataset = h36m_dataset.map(concat_img_heatmaps_h36m)
+    return h36m_dataset
+
+
+def read_maps_poses_images_surreal(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
     # to shape: time, height, width, n_joints
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
@@ -69,7 +87,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     return concat, poses, shapes, joints2d.astype(np.float32)
 
 
-def read_h36m_tfrecord(record):
+def read_tfrecord_h36m(record):
     dict_keys = {'image/center': tf.FixedLenFeature([2], tf.int64),
                  'image/encoded': tf.FixedLenFeature([], tf.string),
                  'image/filename': tf.FixedLenFeature([1], tf.string),
@@ -96,14 +114,14 @@ def read_h36m_tfrecord(record):
     return img, poses, shapes, joints2d
 
 
-def read_h36m_maps(maps_file):
+def read_maps_h36m(maps_file):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
     heatmaps = heatmaps[:, :, :, :config.n_joints]
-    return tf.data.Dataset.from_tensor_slices(heatmaps)
+    return heatmaps
 
 
-def concat_img_heatmaps(heatmaps, img, poses, shapes, joints2d):
+def concat_img_heatmaps_h36m(heatmaps, img, poses, shapes, joints2d):
     return tf.concat([heatmaps, img], axis=3), poses, shapes, joints2d
 
 
