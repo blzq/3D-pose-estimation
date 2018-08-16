@@ -26,15 +26,18 @@ def dataset_from_filenames(maps_files, info_files, frames_paths):
 
 def read_maps_poses_images(maps_file, info_file, frames_path):
     maps_dict = scipy.io.loadmat(maps_file)
+    # to shape: time, height, width, n_joints
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
     mask = np.squeeze(maps_dict['mask'])
     diffs = np.squeeze(maps_dict['diffs'])
     # diffs can contain NaNs but the '<' op should exclude them
-    # np.logical_and(mask, diffs < 100, out=mask)
-    heatmaps = heatmaps[:, :, :, :config.n_joints]
-        # to shape: time, height, width, n_joints
+    # np.logical_and(mask, diffs < 200, out=mask)
     # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
     heatmaps = np.flip(heatmaps, axis=2)
+    # Reorder heatmaps - swap lefts and rights for same reason (see config.py)
+    reord = [0, 1, 5, 6, 7, 2, 3, 4, 11, 12, 13, 8, 9, 10, 15, 14, 17, 16, 18]
+    heatmaps = heatmaps[:, :, :, reord]
+    heatmaps = heatmaps[:, :, :, :config.n_joints]
     img_size_x = heatmaps.shape[2]
 
     info_dict = scipy.io.loadmat(info_file)
@@ -42,6 +45,7 @@ def read_maps_poses_images(maps_file, info_file, frames_path):
     # reshape to T as axis 0
     poses = np.transpose(info_dict['pose'], (1, 0))
     shapes = np.transpose(info_dict['shape'], (1, 0))
+    # to shape: time, joints, (x, y)
     joints2d = np.transpose(info_dict['joints2D'], (2, 1, 0))
     # Flip 2D GT horizontally because image and 3D GT are flipped in SURREAL
     joints2d[:, :, 0] = img_size_x - joints2d[:, :, 0]
@@ -89,14 +93,18 @@ def read_h36m_tfrecord(record):
     joints2d = tf.stack([f['image/x'], f['image/y']], axis=1)
     img_raw = f['image/encoded']
     img = tf.image.decode_jpeg(img_raw)
-    return img, joints2d, poses, shapes
+    return img, poses, shapes, joints2d
 
 
 def read_h36m_maps(maps_file):
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
     heatmaps = heatmaps[:, :, :, :config.n_joints]
-    return heatmaps
+    return tf.data.Dataset.from_tensor_slices(heatmaps)
+
+
+def concat_img_heatmaps(heatmaps, img, poses, shapes, joints2d):
+    return tf.concat([heatmaps, img], axis=3), poses, shapes, joints2d
 
 
 def heatmaps_to_locations(heatmaps_image_stack):
