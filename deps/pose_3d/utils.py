@@ -51,7 +51,7 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
         fov_y=cam_f, near_clip=0.01, far_clip=10.0)
 
     if lights is None or vert_faces is None:
-        rendered = rendered[:, :, :, 3, tf.newaxis]
+        rendered = rendered[:, :, :, 3, tf.newaxis]  # alpha ch: silhouette
     else:
         rendered = tf.reduce_mean(rendered[:, :, :, :3], axis=3, keepdims=True)
 

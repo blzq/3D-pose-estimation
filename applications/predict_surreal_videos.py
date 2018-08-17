@@ -26,7 +26,7 @@ def main(surreal_path):
     for run in ['run0']:  # + ['run1', 'run2']:
         run_path = os.path.join(base_path, run)
         dir_names = sorted(os.listdir(run_path))
-        for dir_name in dir_names[dir_names.index('ung_91_34'):]:
+        for dir_name in dir_names:
             dir_path = os.path.join(run_path, dir_name)
             one_dir_frames_path = sorted(glob.glob(
                 os.path.join(dir_path, dir_name + '*_frames')))

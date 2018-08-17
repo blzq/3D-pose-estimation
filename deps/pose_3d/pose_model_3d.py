@@ -239,7 +239,7 @@ class PoseModel3d:
                                              cam_rot_norm, cam_rot_zeros)
                 cam_reg_loss = tf.losses.mean_squared_error(
                     labels=cam_rot_zeros, predictions=cam_rot_too_large)
-                # 3D points should be in positive space of camera plane
+                # 3D points should be in positive half-space of camera plane
                 cam_plane_n, cam_plane_d = utils.get_camera_normal_plane(
                     out_cam_pos, out_cam_rot)
                 p_dot_n = cam_plane_n[:, tf.newaxis] * gt_joints3d
@@ -261,7 +261,10 @@ class PoseModel3d:
                               tf.constant([0., 0., 0.]), 50.0, self.mesh_faces,
                               self.vert_faces, tf.constant([0.0, -0.5, -3.5]))
                     render_cam = utils.render_mesh_verts_cam(gt_meshes, *view)
+                    render_out = utils.render_mesh_verts_cam(out_meshes,
+                                                             *view_f)
                 tf.summary.image('camera_view', render_cam, max_outputs=1)
+                tf.summary.image('out_mesh', render_out, max_outputs=1)
 
             return total_loss
 

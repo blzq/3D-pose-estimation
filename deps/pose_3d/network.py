@@ -36,6 +36,8 @@ def build_model(inputs, training: bool):
             locations_flat = tf.layers.flatten(input_locations)
 
             features_flat = tf.layers.flatten(mn)
+            features_flat = tf.layers.dropout(features_flat, 0.2,
+                                              training=training)
             in_concat = tf.concat([features_flat, locations_flat], axis=1)
             l_units = in_concat.get_shape().as_list()[1]
             
