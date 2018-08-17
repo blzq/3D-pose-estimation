@@ -88,6 +88,7 @@ def read_maps_poses_images_surreal(maps_file, info_file, frames_path):
 
 
 def read_tfrecord_h36m(record):
+    # These are the tfrecords provided by https://github.com/akanazawa/hmr
     dict_keys = {'image/center': tf.FixedLenFeature([2], tf.int64),
                  'image/encoded': tf.FixedLenFeature([], tf.string),
                  'image/filename': tf.FixedLenFeature([1], tf.string),
@@ -115,6 +116,7 @@ def read_tfrecord_h36m(record):
 
 
 def read_maps_h36m(maps_file):
+    # These are the heatmaps generated using predict_h36m_tfrecords.py
     maps_dict = scipy.io.loadmat(maps_file)
     heatmaps = np.transpose(maps_dict['heat_mat'], (3, 0, 1, 2))
     heatmaps = heatmaps[:, :, :, :config.n_joints]

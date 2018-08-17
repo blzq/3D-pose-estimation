@@ -55,7 +55,8 @@ def build_model(inputs, training: bool):
             in_cam_d = tf.layers.dense(in_cam_concat, cam_units)
             cam_bn = tf.layers.batch_normalization(in_cam_d, training=training)
             in_cam_relu = tf.nn.relu(cam_bn)
-            bl1_cam = _bilinear_res_block(in_cam_relu, cam_units, training)
+            bl1_cam = _bilinear_res_block(in_cam_relu, cam_units, training,
+                                          input_activation=False)
             bl2_cam = _bilinear_res_block(bl1_cam, cam_units, training)
 
         with tf.variable_scope('out_fc'):
