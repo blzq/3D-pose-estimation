@@ -235,7 +235,7 @@ class PoseModel3d:
                 cam_rot_norm = tf.norm(
                     tf.reshape(out_cam_pos, [-1, 3]), axis=1)
                 cam_rot_zeros = tf.zeros_like(cam_rot_norm, tf.float32)
-                cam_rot_too_large = tf.where(cam_rot_norm > config.joint_limit,
+                cam_rot_too_large = tf.where(cam_rot_norm > np.pi,
                                              cam_rot_norm, cam_rot_zeros)
                 cam_reg_loss = tf.losses.mean_squared_error(
                     labels=cam_rot_zeros, predictions=cam_rot_too_large)

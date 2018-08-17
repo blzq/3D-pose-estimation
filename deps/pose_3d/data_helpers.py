@@ -77,13 +77,15 @@ def read_maps_poses_images_surreal(maps_file, info_file, frames_path):
     # Flip image horizontally because image and 3D GT are flipped in SURREAL
     frames = np.flip(frames, axis=2)
 
-    heatmaps = heatmaps[mask]
-    frames = frames[mask]
-    poses = poses[mask]
-    shapes = shapes[mask]
-    joints2d = joints2d[mask]
-
     concat = np.concatenate([heatmaps, frames], axis=3)
+
+    concat, poses, shapes, joints2d = (
+        concat[mask], poses[mask], shapes[mask], joints2d[mask])
+
+    skip = 2  # Only take every n-th frame
+    concat, poses, shapes, joints2d = (
+        concat[::skip], poses[::skip], shapes[::skip], joints2d[::skip])
+
     return concat, poses, shapes, joints2d.astype(np.float32)
 
 
