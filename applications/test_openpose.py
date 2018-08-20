@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from tf_pose.estimator import TfPoseEstimator as OpPoseEstimator
 from tf_pose.networks import get_graph_path
 
+
 project_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../')
 images_dir = os.path.join(project_dir, 'data', 'images')
 

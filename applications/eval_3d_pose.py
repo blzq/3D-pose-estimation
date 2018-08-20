@@ -33,9 +33,9 @@ if __name__ == '__main__':
         one_dir_maps_files = glob.glob(
             os.path.join(one_data_dir, basename + '_c*_maps.mat'))
         # only get the info file and frames for heatmaps that exist
-        one_dir_info_files = map(lambda fn: fn[:-9] + '_info.mat',
+        one_dir_info_files = map(lambda f: f[:-len('_maps.mat')] + '_info.mat',
                                  one_dir_maps_files)
-        one_dir_frames_paths = map(lambda fn: fn[:-9] + '_frames',
+        one_dir_frames_paths = map(lambda f: f[:-len('_maps.mat')] + '_frames',
                                    one_dir_maps_files)
         maps_files.extend(one_dir_maps_files)
         info_files.extend(one_dir_info_files)

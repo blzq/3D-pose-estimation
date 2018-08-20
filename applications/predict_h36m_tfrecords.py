@@ -14,6 +14,8 @@ from tf_pose.estimator import TfPoseEstimator as OpPoseEstimator
 from tf_pose.networks import get_graph_path
 from pose_3d import utils
 
+tf.logging.set_verbosity(tf.logging.WARN)
+
 
 H36M_TFRECORD_PATH = '/mnt/Data/ben/tf_records_human36m/tf_records_human36m_wjoints/train'
 H36M_TFRECORD_PATH_OUT = '/mnt/Data/ben/tf_records_human36m/tf_records_human36m_wjoints/train_processed'
@@ -46,7 +48,6 @@ def parse_record(record):
 
 if __name__ == '__main__':
     tfrecord_files = sorted(os.listdir(H36M_TFRECORD_PATH))
-    tfrecord_files = tfrecord_files[:1]
     tfrecord_files_in = list(map(lambda f: os.path.join(H36M_TFRECORD_PATH, f),
                                  tfrecord_files))
 
@@ -103,18 +104,7 @@ if __name__ == '__main__':
         out_dict['heat_mat'] = np.stack(heat_mats, axis=-1)
 
         out_mat_filename = os.path.join(H36M_TFRECORD_PATH_OUT,
-                                        filename[:-len('.tfrecord')] + 'maps')
+                                        filename[:-len('.tfrecord')] + '_maps')
         print(out_mat_filename)
         scipy.io.savemat(out_mat_filename, out_dict,
                          do_compression=True, appendmat=True)
-
-
-# Dataset iterator
-# filenames = tf.placeholder(tf.string, shape=[None])
-# dataset = tf.data.TFRecordDataset(filenames)
-# dataset = dataset.map(parse_record)
-# iterator = dataset.make_initializable_iterator()
-# sess = tf.Session()
-# sess.run(iterator.initializer, feed_dict={filenames: tfrecord_files})
-# next_record = iterator.get_next()
-# record = sess.run(next_record)

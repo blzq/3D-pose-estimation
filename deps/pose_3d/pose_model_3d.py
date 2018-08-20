@@ -5,8 +5,8 @@ import pkg_resources
 
 import tensorflow as tf
 from tensorflow import keras
-from tensorboard.plugins.beholder import Beholder
-from tensorflow.contrib.data.python.ops import prefetching_ops
+# from tensorboard.plugins.beholder import Beholder
+# from tensorflow.contrib.data.python.ops import prefetching_ops
 import numpy as np
 
 from .network import build_model, build_discriminator
@@ -193,7 +193,8 @@ class PoseModel3d:
                 out_cam_r_tile = tf.reshape(tf.tile(out_cam_rot,
                                                     [1, config.n_joints_smpl]),
                                             [-1, 3])
-                out_cam_f = self.outputs[:, 78]
+                out_cam_f = tf.tile([0.05], [tf.shape(self.outputs)[0]])
+                # out_cam_f = self.outputs[:, 78]
                 out_cam_f_tile = tf.reshape(tf.tile(out_cam_f[:, tf.newaxis],
                                                     [1, config.n_joints_smpl]),
                                             [-1])
@@ -203,26 +204,23 @@ class PoseModel3d:
                         tf.reshape(out_joints, [-1, 3]),
                         out_cam_p_tile, out_cam_r_tile, out_cam_f_tile)
                 # Rescale to image size
-                out_2d = (out_2d + 1) * self.img_side_len * 0.5
+                out_2d = (out_2d + 1) * self.img_side_len / 2
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
-                reproj_loss = tf.losses.huber_loss(
+                reproj_loss = tf.losses.mean_squared_error(
                     labels=tf.reshape(gt_joints2d, [-1, 2]),
-                    predictions=out_2d, delta=self.img_side_len/15,
-                    weights=config.reproj_loss_scale)
+                    predictions=out_2d, weights=config.reproj_loss_scale)
                 tf.summary.scalar('reproj_loss', reproj_loss, family='losses')
-                total_loss += reproj_loss
 
                 with tf.variable_scope("projection"):
                     out_2d_gt_pose = proj.project(
                         tf.reshape(gt_joints3d, [-1, 3]),
                         out_cam_p_tile, out_cam_r_tile, out_cam_f_tile)
                 # Rescale to image size
-                out_2d_gt_pose = (out_2d_gt_pose + 1) * self.img_side_len * 0.5
+                out_2d_gt_pose = (out_2d_gt_pose + 1) * self.img_side_len / 2
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
-                cam_loss = tf.losses.huber_loss(
+                cam_loss = tf.losses.mean_squared_error(
                     labels=tf.reshape(gt_joints2d, [-1, 2]),
-                    predictions=out_2d_gt_pose, delta=self.img_side_len/15,
-                    weights=config.cam_loss_scale)
+                    predictions=out_2d_gt_pose, weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 # camera axis y-component should point up and focal length > 0
                 cam_limits = tf.gather(self.outputs, [76, 78], axis=1)
@@ -231,7 +229,7 @@ class PoseModel3d:
                                    cam_limits, cam_zeros)
                 cam_loss_neg = tf.losses.mean_squared_error(
                     labels=cam_zeros, predictions=cam_neg)
-                # penalize rotations that are over 2 * pi
+                # penalize rotations that are over pi
                 cam_rot_norm = tf.norm(
                     tf.reshape(out_cam_pos, [-1, 3]), axis=1)
                 cam_rot_zeros = tf.zeros_like(cam_rot_norm, tf.float32)
@@ -242,22 +240,24 @@ class PoseModel3d:
                 # 3D points should be in positive half-space of camera plane
                 cam_plane_n, cam_plane_d = utils.get_camera_normal_plane(
                     out_cam_pos, out_cam_rot)
-                p_dot_n = cam_plane_n[:, tf.newaxis] * gt_joints3d
-                plane_zeros = tf.zeros_like(p_dot_n, tf.float32)
+                p_dot_n = cam_plane_n[:, tf.newaxis] * gt_joints3d  # or = 0.0
+                plane_zeros = tf.zeros_like(p_dot_n, tf.float32) + 0.05
                 cam_plane_neg = tf.where(
                     p_dot_n < cam_plane_d[:, tf.newaxis, tf.newaxis],
                     p_dot_n, plane_zeros)
                 cam_plane_loss = tf.losses.mean_squared_error(
                     labels=plane_zeros, predictions=cam_plane_neg)
                 cam_aux_losses = cam_loss_neg + cam_reg_loss + cam_plane_loss
-                total_loss += cam_loss + cam_aux_losses
+                cam_choose_loss = tf.where(cam_aux_losses > 0, cam_aux_losses,
+                                           cam_loss + reproj_loss)
+                total_loss += cam_choose_loss
 
                 with tf.variable_scope("render"):
                     view = (out_cam_pos, out_cam_rot,
                             tf.atan2(1.0, out_cam_f) * 360 / np.pi,
                             self.mesh_faces, self.vert_faces,
                             out_cam_pos[:, tf.newaxis, :])
-                    view_f = (tf.constant([0.0, -0.5, -3.5]),
+                    view_f = (tf.constant([0.0, -0.4, -3.0]),
                               tf.constant([0., 0., 0.]), 50.0, self.mesh_faces,
                               self.vert_faces, tf.constant([0.0, -0.5, -3.5]))
                     render_cam = utils.render_mesh_verts_cam(gt_meshes, *view)
@@ -390,10 +390,10 @@ class PoseModel3d:
                                 [1, config.n_joints_smpl])
             with tf.variable_scope("projection"):
                 # reshape from (batch, j, 3) to (batch * j, 3)
-                out_2d = project(tf.reshape(out_joints, [-1, 3]),
-                                 tf.reshape(out_cam_pos, [-1, 3]),
-                                 tf.reshape(out_cam_rot, [-1, 3]),
-                                 tf.reshape(out_cam_f, [-1]))
+                out_2d = proj.project(tf.reshape(out_joints, [-1, 3]),
+                                      tf.reshape(out_cam_pos, [-1, 3]),
+                                      tf.reshape(out_cam_rot, [-1, 3]),
+                                      tf.reshape(out_cam_f, [-1]))
             # Rescale to image size
             out_2d = (out_2d + 1) * self.img_side_len * 0.5
             # joints2d reshape from (batch, j, 2) to (batch * j, 2)

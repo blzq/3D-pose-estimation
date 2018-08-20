@@ -64,12 +64,13 @@ def get_camera_normal_plane(cam_pos, cam_rot):
 
     origin_forward = tf.tile(tf.constant([0.0, 0.0, 1.0]), [batch_size])
     origin_forward = tf.reshape(origin_forward, [batch_size, 3, 1])
-    cam_lookat = tf.matmul(cam_rot_mat, origin_forward)
-    cam_lookat = tf.squeeze(cam_lookat)
+    cam_normal = tf.matmul(cam_rot_mat, origin_forward)
+    cam_normal = tf.squeeze(cam_normal)
+    cam_normal = tf.nn.l2_normalize(cam_normal, axis=1)
 
-    # plane equation: p . n = d where p = cam_pos, n = cam_lookat
-    cam_plane_d = tf.reduce_sum(cam_pos * cam_lookat, axis=1)
-    return cam_lookat, cam_plane_d
+    # plane equation: p . n = d where p = cam_pos, n = cam_normal
+    cam_plane_d = tf.reduce_sum(cam_pos * cam_normal, axis=1)
+    return cam_normal, cam_plane_d
 
 
 def normals_from_mesh(vertices, faces, vertex_faces):

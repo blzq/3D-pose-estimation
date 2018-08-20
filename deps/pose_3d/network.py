@@ -53,7 +53,7 @@ def build_model(inputs, training: bool):
 
         with tf.variable_scope('camera_blocks'):
             cam_units = l_units // 4
-            in_cam_concat = tf.stop_gradient(in_concat)
+            in_cam_concat = in_concat
             in_cam_d = tf.layers.dense(in_cam_concat, cam_units)
             cam_bn = tf.layers.batch_normalization(in_cam_d, training=training)
             in_cam_relu = tf.nn.relu(cam_bn)
