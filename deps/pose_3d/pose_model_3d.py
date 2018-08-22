@@ -257,8 +257,7 @@ class PoseModel3d:
                 vec_to_gt_3d = tf.nn.l2_normalize(vec_to_gt_3d, axis=2)
                 gt_2d_in_3d = utils.get_2d_points_in_3d(
                     gt_joints2d, out_cam_rot, out_cam_f, self.img_side_len)
-                vec_to_gt_2d = gt_2d_in_3d - out_cam_pos[:, tf.newaxis, :]
-                vec_to_gt_2d = tf.nn.l2_normalize(vec_to_gt_2d, axis=2)
+                vec_to_gt_2d = tf.nn.l2_normalize(gt_2d_in_3d, axis=2)
                 dot = tf.reduce_sum(vec_to_gt_3d * vec_to_gt_2d, axis=2)
                 dot = tf.clip_by_value(dot, -0.9999, 0.9999)
                 angle_diff = tf.acos(dot)
