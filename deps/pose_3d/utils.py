@@ -73,6 +73,20 @@ def get_camera_normal_plane(cam_pos, cam_rot):
     return cam_normal, cam_plane_d
 
 
+def get_2d_points_in_3d(points_2d, cam_rot, cam_f, img_side_len):
+    rescaled_2d = points_2d / (img_side_len / 2) - 1
+    fl_broadcast = tf.reshape(cam_f, [-1, 1, 1])
+    fl_broadcast = tf.tile(fl_broadcast, [1, 24, 1])
+    points_2d_in_3d = tf.concat([rescaled_2d, fl_broadcast], axis=2)
+    cam_rot_mat = project.rodrigues_batch(cam_rot)
+    cam_rot_mat = tf.reshape(cam_rot_mat, [-1, 1, 3, 3])
+    cam_rot_mat = tf.tile(cam_rot_mat, [1, config.n_joints_smpl, 1, 1])
+    points_2d_in_3d = points_2d_in_3d[:, :, :, tf.newaxis]
+    points_2d_in_3d = tf.matmul(cam_rot_mat, points_2d_in_3d)
+    points_2d_in_3d = tf.squeeze(points_2d_in_3d)
+    return points_2d_in_3d
+
+
 def normals_from_mesh(vertices, faces, vertex_faces):
     """ Compute unit normals given mesh vertices and faces
     Args:

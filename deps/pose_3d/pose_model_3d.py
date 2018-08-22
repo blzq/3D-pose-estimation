@@ -32,7 +32,7 @@ class PoseModel3d:
         self.graph = graph if graph is not None else tf.get_default_graph()
         with self.graph.as_default():
             tfconf = tf.ConfigProto()
-            tfconf.gpu_options.allow_growth = True  # pylint: disable=no-member
+            # tfconf.gpu_options.allow_growth = True  # pylint: disable=no-member
             self.sess = tf.Session(config=tfconf)
             # allow using Keras layers in network
             keras.backend.set_session(self.sess)
@@ -193,11 +193,12 @@ class PoseModel3d:
                 out_cam_r_tile = tf.reshape(tf.tile(out_cam_rot,
                                                     [1, config.n_joints_smpl]),
                                             [-1, 3])
-                out_cam_f = tf.tile([0.05], [tf.shape(self.outputs)[0]])
                 # out_cam_f = self.outputs[:, 78]
+                out_cam_f = tf.tile([config.fl], [tf.shape(self.outputs)[0]])
                 out_cam_f_tile = tf.reshape(tf.tile(out_cam_f[:, tf.newaxis],
                                                     [1, config.n_joints_smpl]),
                                             [-1])
+
                 with tf.variable_scope("projection"):
                     # reshape from (batch, j, 3) to (batch * j, 3)
                     out_2d = proj.project(
@@ -240,26 +241,41 @@ class PoseModel3d:
                 # 3D points should be in positive half-space of camera plane
                 cam_plane_n, cam_plane_d = utils.get_camera_normal_plane(
                     out_cam_pos, out_cam_rot)
-                p_dot_n = cam_plane_n[:, tf.newaxis] * gt_joints3d  # or = 0.0
-                plane_zeros = tf.zeros_like(p_dot_n, tf.float32) + 0.05
+                p_dot_n = tf.reduce_sum(
+                    cam_plane_n[:, tf.newaxis, :] * gt_joints3d, axis=1)
+                plane_zeros = tf.zeros_like(p_dot_n) + config.fl * 10.0
                 cam_plane_neg = tf.where(
-                    p_dot_n < cam_plane_d[:, tf.newaxis, tf.newaxis],
+                    p_dot_n < cam_plane_d[:, tf.newaxis],
                     p_dot_n, plane_zeros)
                 cam_plane_loss = tf.losses.mean_squared_error(
                     labels=plane_zeros, predictions=cam_plane_neg)
-                cam_aux_losses = cam_loss_neg + cam_reg_loss + cam_plane_loss
-                cam_choose_loss = tf.where(cam_aux_losses > 0, cam_aux_losses,
-                                           cam_loss + reproj_loss)
-                total_loss += cam_choose_loss
+                cam_aux_losses = cam_loss_neg + cam_reg_loss
+                tf.summary.scalar('cam_aux', cam_plane_loss, family='losses')
+
+                # See https://arxiv.org/pdf/1808.04999.pdf
+                vec_to_gt_3d = gt_joints3d - out_cam_pos[:, tf.newaxis, :]
+                vec_to_gt_3d = tf.nn.l2_normalize(vec_to_gt_3d, axis=2)
+                gt_2d_in_3d = utils.get_2d_points_in_3d(
+                    gt_joints2d, out_cam_rot, out_cam_f, self.img_side_len)
+                vec_to_gt_2d = gt_2d_in_3d - out_cam_pos[:, tf.newaxis, :]
+                vec_to_gt_2d = tf.nn.l2_normalize(vec_to_gt_2d, axis=2)
+                dot = tf.reduce_sum(vec_to_gt_3d * vec_to_gt_2d, axis=2)
+                dot = tf.clip_by_value(dot, -0.9999, 0.9999)
+                angle_diff = tf.acos(dot)
+                cam_angle_loss = tf.losses.mean_squared_error(
+                    labels=tf.zeros_like(angle_diff), predictions=angle_diff)
+                tf.summary.scalar('cam_angle', cam_angle_loss, family='losses')
+
+                total_loss += cam_angle_loss
 
                 with tf.variable_scope("render"):
                     view = (out_cam_pos, out_cam_rot,
-                            tf.atan2(1.0, out_cam_f) * 360 / np.pi,
+                            tf.atan2(0.024, out_cam_f) * 360 / np.pi,
                             self.mesh_faces, self.vert_faces,
                             out_cam_pos[:, tf.newaxis, :])
-                    view_f = (tf.constant([0.0, -0.4, -3.0]),
-                              tf.constant([0., 0., 0.]), 50.0, self.mesh_faces,
-                              self.vert_faces, tf.constant([0.0, -0.5, -3.5]))
+                    view_f = (tf.constant([0.0, -0.35, -4.0]),
+                              tf.constant([0., 0., 0.]), 30.0, self.mesh_faces,
+                              self.vert_faces, tf.constant([0.0, 1.0, -4.0]))
                     render_cam = utils.render_mesh_verts_cam(gt_meshes, *view)
                     render_out = utils.render_mesh_verts_cam(out_meshes,
                                                              *view_f)
@@ -313,7 +329,7 @@ class PoseModel3d:
             if self.discriminator:
                 disc_total_loss, disc_enc_loss = self.get_discriminator_loss(
                     out_pose, gt_pose)
-                disc_optimizer = tf.train.AdamOptimizer(learning_rate=4e-4)
+                disc_optimizer = tf.train.RMSPropOptimizer(learning_rate=2e-4)
                 discriminator_vars = tf.get_collection(
                     tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
                 train_discriminator = disc_optimizer.minimize(
@@ -325,7 +341,7 @@ class PoseModel3d:
             tf.summary.scalar('total_loss', total_loss, family='losses')
             summary = tf.summary.merge_all()
 
-            optimizer = tf.train.AdamOptimizer(learning_rate=2e-4)
+            optimizer = tf.train.RMSPropOptimizer(learning_rate=1e-4)
             encoder_vars = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope='encoder')
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)

@@ -15,7 +15,9 @@ cam_loss_scale = 0.000016
 n_joints = 14  # COCO number of joints (not including background, eyes, ears)
 n_joints_smpl = 24  # SMPL model number of joints
 
-input_img_size = (240, 320)
+input_img_size = (240, 320)  # image (height, width)
+
+fl = 0.05  # focal length in metres
 
 # 2D joint order and locations for various datasets
 # SMPL model joints order:

@@ -26,9 +26,9 @@ SAVER_PATH = '/home/ben/tensorflow_logs/3d_pose/ckpts/3d_pose.ckpt'
 SUMMARY_DIR = '/home/ben/tensorflow_logs/3d_pose/'
 
 
-def main():
+def main(in_filename):
     images_path = os.path.join(__init__.project_path, 'data', 'images')
-    in_im = cv2.imread(os.path.join(images_path, 'test_image_multi.png'))
+    in_im = cv2.imread(os.path.join(images_path, in_filename))
     in_im = cv2.cvtColor(in_im, cv2.COLOR_BGR2RGB)
     img_size = config.input_img_size
     expect_aspect = img_size[1] / img_size[0]
@@ -126,4 +126,4 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(sys.argv[1]))
