@@ -186,14 +186,18 @@ class PoseModel3d:
 
             if self.reproject_loss:
                 out_cam_pos = self.outputs[:, 72:75]
+                pos_mask = tf.constant([0., 0., 1.])[tf.newaxis]
+                out_cam_pos = out_cam_pos * pos_mask
                 out_cam_p_tile = tf.reshape(tf.tile(out_cam_pos,
                                                     [1, config.n_joints_smpl]),
                                             [-1, 3])
                 out_cam_rot = self.outputs[:, 75:78]
+                rot_mask = tf.constant([0., 1., 0.])[tf.newaxis]
+                out_cam_rot = out_cam_rot * rot_mask
                 out_cam_r_tile = tf.reshape(tf.tile(out_cam_rot,
                                                     [1, config.n_joints_smpl]),
                                             [-1, 3])
-                # out_cam_f = self.outputs[:, 78]
+                out_cam_f = self.outputs[:, 78]
                 out_cam_f = tf.tile([config.fl], [tf.shape(self.outputs)[0]])
                 out_cam_f_tile = tf.reshape(tf.tile(out_cam_f[:, tf.newaxis],
                                                     [1, config.n_joints_smpl]),
@@ -223,18 +227,18 @@ class PoseModel3d:
                     labels=tf.reshape(gt_joints2d, [-1, 2]),
                     predictions=out_2d_gt_pose, weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
-                # camera axis y-component should point up and focal length > 0
-                cam_limits = tf.gather(self.outputs, [76, 78], axis=1)
-                cam_zeros = tf.zeros(tf.shape(cam_limits))
+                # camera focal length > 0
+                cam_limits = self.outputs[:, 78]
+                cam_zeros = tf.zeros_like(cam_limits)
                 cam_neg = tf.where(tf.less(cam_limits, cam_zeros),
                                    cam_limits, cam_zeros)
                 cam_loss_neg = tf.losses.mean_squared_error(
                     labels=cam_zeros, predictions=cam_neg)
-                # penalize rotations that are over pi
+                # penalize rotations that are over pi / 2
                 cam_rot_norm = tf.norm(
                     tf.reshape(out_cam_pos, [-1, 3]), axis=1)
                 cam_rot_zeros = tf.zeros_like(cam_rot_norm, tf.float32)
-                cam_rot_too_large = tf.where(cam_rot_norm > np.pi,
+                cam_rot_too_large = tf.where(cam_rot_norm > np.pi / 2,
                                              cam_rot_norm, cam_rot_zeros)
                 cam_reg_loss = tf.losses.mean_squared_error(
                     labels=cam_rot_zeros, predictions=cam_rot_too_large)
@@ -259,13 +263,22 @@ class PoseModel3d:
                     gt_joints2d, out_cam_rot, out_cam_f, self.img_side_len)
                 vec_to_gt_2d = tf.nn.l2_normalize(gt_2d_in_3d, axis=2)
                 dot = tf.reduce_sum(vec_to_gt_3d * vec_to_gt_2d, axis=2)
+                # Dot product can be out of [-1, 1] because of normalize eps
                 dot = tf.clip_by_value(dot, -0.9999, 0.9999)
                 angle_diff = tf.acos(dot)
                 cam_angle_loss = tf.losses.mean_squared_error(
                     labels=tf.zeros_like(angle_diff), predictions=angle_diff)
                 tf.summary.scalar('cam_angle', cam_angle_loss, family='losses')
 
-                total_loss += cam_angle_loss
+                pos_diff = tf.reduce_mean(tf.norm(out_cam_pos, axis=1), axis=0)
+                rot_dot = tf.reduce_sum(
+                    cam_plane_n * tf.nn.l2_normalize(-out_cam_pos, axis=1), 
+                    axis=1)
+                rot_dot = tf.reduce_mean(rot_dot, axis=0)
+                tf.summary.scalar('cam_pos_diff', pos_diff, family='camera')
+                tf.summary.scalar('rot_dot', rot_dot, family='camera')
+
+                total_loss += cam_angle_loss + cam_reg_loss
 
                 with tf.variable_scope("render"):
                     view = (out_cam_pos, out_cam_rot,
@@ -276,7 +289,7 @@ class PoseModel3d:
                               tf.constant([0., 0., 0.]), 30.0, self.mesh_faces,
                               self.vert_faces, tf.constant([0.0, 1.0, -4.0]))
                     render_cam = utils.render_mesh_verts_cam(gt_meshes, *view)
-                    render_out = utils.render_mesh_verts_cam(out_meshes,
+                    render_out = utils.render_mesh_verts_cam(gt_meshes,
                                                              *view_f)
                 tf.summary.image('camera_view', render_cam, max_outputs=1)
                 tf.summary.image('out_mesh', render_out, max_outputs=1)
@@ -373,7 +386,7 @@ class PoseModel3d:
                                 (train, summary), feed_dict=feed)
                     except tf.errors.OutOfRangeError:
                         break
-                    print("{:7}".format(gs), end=' ', flush=True)
+                    print("\r{:7}".format(gs), end=' ', flush=True)
                     if gs % 10 == 0:
                         self.summary_writer.add_summary(summary_eval, gs)
                         # self.beholder.update(session=self.sess)

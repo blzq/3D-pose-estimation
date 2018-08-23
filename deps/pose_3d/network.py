@@ -27,7 +27,6 @@ def build_model(inputs, training: bool):
 
         with tf.variable_scope('mobilenetv2'):
             mn = _mobilenetv2(conv_relu1, training, alpha=1.1)
-            mn_cam = _mobilenetv2(conv_relu1, training, alpha=0.4)
 
         with tf.variable_scope('input_locations'):
             input_locations = utils.soft_argmax_rescaled(input_heatmaps)
@@ -49,12 +48,8 @@ def build_model(inputs, training: bool):
             bl4 = _bilinear_res_block(bl3, l_units, training)
 
         with tf.variable_scope('camera_blocks'):
-            features_flat_cam = tf.layers.flatten(mn_cam)
-            features_drop_cam = tf.layers.dropout(features_flat_cam, 0.2,
-                                                  training=training)
-            cam_concat = tf.concat([features_drop_cam, locations_flat], axis=1)
             cam_units = 256
-            cam_d = tf.layers.dense(cam_concat, cam_units)
+            cam_d = tf.layers.dense(locations_flat, cam_units)
             cam_bn = tf.layers.batch_normalization(cam_d, training=training)
             cam_relu = tf.nn.relu(cam_bn)
             bl1_cam = _bilinear_res_block(cam_relu, cam_units, training,

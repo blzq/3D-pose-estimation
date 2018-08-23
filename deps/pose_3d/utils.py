@@ -48,7 +48,7 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
         verts, faces, normals, diffuse, cam_pos, cam_lookat, cam_up,
         lights, light_intensities, img_width, img_height,
         specular_colors=None, shininess_coefficients=None, ambient_color=None,
-        fov_y=cam_f, near_clip=0.01, far_clip=10.0)
+        fov_y=cam_f, near_clip=0.01, far_clip=100.0)
 
     if lights is None or vert_faces is None:
         rendered = rendered[:, :, :, 3, tf.newaxis]  # alpha ch: silhouette
@@ -74,7 +74,7 @@ def get_camera_normal_plane(cam_pos, cam_rot):
 
 
 def get_2d_points_in_3d(points_2d, cam_rot, cam_f, img_side_len):
-    rescaled_2d = points_2d / (img_side_len / 2) - 1
+    rescaled_2d = 0.024 * (points_2d / (img_side_len // 2) - 1)
     fl_broadcast = tf.reshape(cam_f, [-1, 1, 1])
     fl_broadcast = tf.tile(fl_broadcast, [1, 24, 1])
     points_2d_in_3d = tf.concat([rescaled_2d, fl_broadcast], axis=2)
@@ -153,9 +153,12 @@ def rotate_global_pose(thetas):
     batch_size = tf.shape(thetas)[0]
 
     turn_x = tf.constant([-np.pi / 2, 0.0, 0.0])
+    turn_y = tf.constant([0.0, np.pi / 2, 0.0])
     turn_x_batch = tf.reshape(tf.tile(turn_x, [batch_size]), [batch_size, 3])
+    turn_y_batch = tf.reshape(tf.tile(turn_y, [batch_size]), [batch_size, 3])
+    turn_both_batch = add_axis_angle_rotations(turn_y_batch, turn_x_batch)
 
-    global_rot_vec = add_axis_angle_rotations(turn_x_batch, thetas[:, :3])
+    global_rot_vec = add_axis_angle_rotations(turn_both_batch, thetas[:, :3])
 
     thetas = tf.concat([global_rot_vec, thetas[:, 3:]], axis=1)
     return thetas
