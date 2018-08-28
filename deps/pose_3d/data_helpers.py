@@ -18,9 +18,7 @@ def dataset_from_filenames_surreal(maps_files, info_files, frames_paths):
         tf.contrib.data.parallel_interleave(
             lambda mf, pf, fp: tf.data.Dataset.from_tensor_slices(tuple(
                 tf.py_func(read_maps_poses_images_surreal,
-                           [mf, pf, fp],
-                           [tf.float32, tf.float32, tf.float32, tf.float32],
-                           stateful=False))),
+                           [mf, pf, fp], [tf.float32] * 5, stateful=False))),
         cycle_length=12, block_length=1, sloppy=True,
         buffer_output_elements=32, prefetch_input_elements=4))
 
@@ -49,7 +47,7 @@ def read_maps_poses_images_surreal(maps_file, info_file, frames_path):
     mask = np.squeeze(maps_dict['mask'])
     diffs = np.squeeze(maps_dict['diffs'])
     # diffs can contain NaNs but the '<' op should exclude them
-    # np.logical_and(mask, diffs < 200, out=mask)
+    np.logical_and(mask, diffs < 250, out=mask)
     # Flip heatmap horizontally because image and 3D GT are flipped in SURREAL
     heatmaps = np.flip(heatmaps, axis=2)
     # Reorder heatmaps - swap lefts and rights for same reason (see config.py)
@@ -67,6 +65,7 @@ def read_maps_poses_images_surreal(maps_file, info_file, frames_path):
     joints2d = np.transpose(info_dict['joints2D'], (2, 1, 0))
     # Flip 2D GT horizontally because image and 3D GT are flipped in SURREAL
     joints2d[:, :, 0] = img_size_x - joints2d[:, :, 0]
+    zrot = np.squeeze(np.array(info_dict['zrot']))
 
     # Make sure to sort the frames: VERY IMPORTANT!
     frames = [ cv2.cvtColor(cv2.imread(f.decode('utf-8')), cv2.COLOR_BGR2RGB)
@@ -79,14 +78,15 @@ def read_maps_poses_images_surreal(maps_file, info_file, frames_path):
 
     concat = np.concatenate([heatmaps, frames], axis=3)
 
-    concat, poses, shapes, joints2d = (
-        concat[mask], poses[mask], shapes[mask], joints2d[mask])
+    concat, poses, shapes, joints2d, zrot = (
+        concat[mask], poses[mask], shapes[mask], joints2d[mask], zrot[mask])
 
     skip = 2  # Only take every n-th frame
-    concat, poses, shapes, joints2d = (
-        concat[::skip], poses[::skip], shapes[::skip], joints2d[::skip])
+    concat, poses, shapes, joints2d, zrot = (
+        concat[::skip], poses[::skip], shapes[::skip], joints2d[::skip],
+        zrot[::skip])
 
-    return concat, poses, shapes, joints2d.astype(np.float32)
+    return concat, poses, shapes, joints2d.astype(np.float32), zrot
 
 
 def read_tfrecord_h36m(record):
@@ -126,7 +126,7 @@ def read_maps_h36m(maps_file):
 
 
 def concat_img_heatmaps_h36m(heatmaps, img, poses, shapes, joints2d):
-    return tf.concat([heatmaps, img], axis=3), poses, shapes, joints2d
+    return tf.concat([heatmaps, img], axis=3), poses, shapes, joints2d, 0.0
 
 
 def heatmaps_to_locations(heatmaps_image_stack):

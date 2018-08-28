@@ -74,7 +74,7 @@ def get_camera_normal_plane(cam_pos, cam_rot):
 
 
 def get_2d_points_in_3d(points_2d, cam_rot, cam_f, img_side_len):
-    rescaled_2d = 0.024 * (points_2d / (img_side_len // 2) - 1)
+    rescaled_2d = (1 / config.ss) * (points_2d / img_side_len - 0.5)
     fl_broadcast = tf.reshape(cam_f, [-1, 1, 1])
     fl_broadcast = tf.tile(fl_broadcast, [1, 24, 1])
     points_2d_in_3d = tf.concat([rescaled_2d, fl_broadcast], axis=2)
@@ -94,6 +94,7 @@ def normals_from_mesh(vertices, faces, vertex_faces):
         faces: [triangle_count, 3]
         vertex_faces: [vertex_count, max_vertex_order] in the format of
                       adjacency list padded with invalid (too large) indices
+                      to form a matrix
     Returns:
         normals: [batch, vertex_count, 3]
     """
@@ -146,16 +147,16 @@ def vertex_faces_from_face_verts(faces):
     return vertex_faces
 
 
-def rotate_global_pose(thetas):
+def rotate_global_pose(thetas, zrot):
     # In SURREAL, the global rotation is such that the person's vertical
     # is aligned with the z axis. Make it so the person's vertical is aligned
     # with the y axis.
     batch_size = tf.shape(thetas)[0]
 
     turn_x = tf.constant([-np.pi / 2, 0.0, 0.0])
-    turn_y = tf.constant([0.0, np.pi / 2, 0.0])
     turn_x_batch = tf.reshape(tf.tile(turn_x, [batch_size]), [batch_size, 3])
-    turn_y_batch = tf.reshape(tf.tile(turn_y, [batch_size]), [batch_size, 3])
+    zeros = tf.zeros(batch_size)
+    turn_y_batch = tf.stack([zeros, zrot + np.pi / 2, zeros], axis=-1)
     turn_both_batch = add_axis_angle_rotations(turn_y_batch, turn_x_batch)
 
     global_rot_vec = add_axis_angle_rotations(turn_both_batch, thetas[:, :3])

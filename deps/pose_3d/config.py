@@ -18,6 +18,7 @@ n_joints_smpl = 24  # SMPL model number of joints
 input_img_size = (240, 320)  # image (height, width)
 
 fl = 0.05  # focal length in metres
+ss = 0.024 # camera sensor size in metres
 
 # 2D joint order and locations for various datasets
 # SMPL model joints order:

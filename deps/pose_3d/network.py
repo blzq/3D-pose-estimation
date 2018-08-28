@@ -18,6 +18,9 @@ def build_model(inputs, training: bool):
             input_heatmaps = inputs[:, :, :, :config.n_joints]
             input_heatmaps = utils.gaussian_blur(input_heatmaps)
             inputs = tf.concat([input_heatmaps, input_rgb], axis=3)
+            tf.summary.image('in_images', 
+                             tf.reduce_sum(input_rgb, axis=3, keepdims=True),
+                             max_outputs=1)
 
         with tf.variable_scope('init_conv'):
             in_channels = inputs.get_shape().as_list()[-1]
