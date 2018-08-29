@@ -192,31 +192,31 @@ class PoseModel3d:
                 out_cam_pos = self.outputs[:, 72:75]
                 # out_cam_pos = out_cam_pos * pos_mask
                 # pos_mask = tf.constant([0., 0., 1.])[tf.newaxis]
-                out_cam_p_tile = tf.reshape(tf.tile(out_cam_pos,
-                                                    [1, config.n_joints_smpl]),
-                                            [-1, 3])
+                out_cam_p_tile = tf.reshape(
+                    tf.tile(out_cam_pos, [1, config.n_joints_smpl]), [-1, 3])
                 out_cam_rot = self.outputs[:, 75:78]
                 # rot_mask = tf.constant([0., 1., 0.])[tf.newaxis]
                 # out_cam_rot = out_cam_rot * rot_mask
-                out_cam_r_tile = tf.reshape(tf.tile(out_cam_rot,
-                                                    [1, config.n_joints_smpl]),
-                                            [-1, 3])
+                out_cam_r_tile = tf.reshape(
+                    tf.tile(out_cam_rot, [1, config.n_joints_smpl]), [-1, 3])
                 out_cam_f = self.outputs[:, 78]
                 out_cam_f = tf.tile([config.fl], [tf.shape(self.outputs)[0]])
-                out_cam_f_tile = tf.reshape(tf.tile(out_cam_f[:, tf.newaxis],
-                                                    [1, config.n_joints_smpl]),
-                                            [-1])
+                out_cam_f_tile = tf.squeeze(tf.tile(out_cam_f[:, tf.newaxis], 
+                                            [1, config.n_joints_smpl]))
 
                 # 2D reprojection loss - uses predicted camera parameters to
                 # project both GT and predicted 3D: only active if low (< 0.01)
+                # Stop gradients since this loss should only affect pose preds
+                cam_params_tile_sg = (
+                    tf.stop_gradient(out_cam_p_tile),
+                    tf.stop_gradient(out_cam_r_tile),
+                    tf.stop_gradient(out_cam_f_tile))
                 with tf.variable_scope("projection"):
                     # reshape from (batch, j, 3) to (batch * j, 3)
                     out_2d = proj.project(
-                        tf.reshape(out_joints, [-1, 3]),
-                        out_cam_p_tile, out_cam_r_tile, out_cam_f_tile)
+                        tf.reshape(out_joints, [-1, 3]), *cam_params_tile_sg)
                     gt_2d_out_cam = proj.project(
-                        tf.reshape(gt_joints3d, [-1, 3]),
-                        out_cam_p_tile, out_cam_r_tile, out_cam_f_tile)
+                        tf.reshape(gt_joints3d, [-1, 3]), *cam_params_tile_sg)
                 # Rescale to image size
                 out_2d = out_2d * self.img_dim[1] + self.img_dim / 2
                 gt_2d_out_cam = gt_2d_out_cam*self.img_dim[1] + self.img_dim/2
@@ -228,7 +228,7 @@ class PoseModel3d:
                 reproj_loss = tf.minimum(1 / config.n_joints_smpl, reproj_loss)
                 total_loss += reproj_loss
 
-                # Camera loss - compares reprojected GT 3D using predicted 
+                # Camera loss - compares reprojected GT 3D using predicted
                 # camera to GT 2D locations: only active if low (< 0.01)
                 with tf.variable_scope("projection"):
                     out_2d_gt_pose = proj.project(
@@ -243,7 +243,7 @@ class PoseModel3d:
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
                 cam_loss = tf.minimum(0.5, cam_loss)
 
-                # Camera angle loss - compare reprojected GT 3D using predicted 
+                # Camera angle loss - compare reprojected GT 3D using predicted
                 # camera to GT 2D locations using a different method
                 # See https://arxiv.org/pdf/1808.04999.pdf
                 vec_to_gt_3d = gt_joints3d - out_cam_pos[:, tf.newaxis, :]
