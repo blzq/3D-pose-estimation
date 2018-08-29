@@ -73,8 +73,8 @@ def get_camera_normal_plane(cam_pos, cam_rot):
     return cam_normal, cam_plane_d
 
 
-def get_2d_points_in_3d(points_2d, cam_rot, cam_f, img_side_len):
-    rescaled_2d = (1 / config.ss) * (points_2d / img_side_len - 0.5)
+def get_2d_points_in_3d(points_2d, cam_rot, cam_f, img_dim):
+    rescaled_2d = config.ss * (points_2d - img_dim / 2) / img_dim[1]
     fl_broadcast = tf.reshape(cam_f, [-1, 1, 1])
     fl_broadcast = tf.tile(fl_broadcast, [1, 24, 1])
     points_2d_in_3d = tf.concat([rescaled_2d, fl_broadcast], axis=2)
