@@ -164,7 +164,7 @@ class PoseModel3d:
             total_loss = pose_loss + reg_loss
 
             if self.mesh_loss or self.reproject_loss:
-                # TODO: 3D mesh loss uses ground truth global rotation
+                # 3D mesh loss uses ground truth global rotation
                 out_pose_gt_global = tf.concat(
                     [gt_pose[:, :3], out_pose[:, 3:]], axis=1)
                 out_meshes, _, _ = self.smpl(betas, out_pose_gt_global,
@@ -185,19 +185,19 @@ class PoseModel3d:
                 total_loss += loss3d
 
             if self.reproject_loss:
-                # Flip y-axis since it is in image coordinates
+                # Flip GT 2D y-axis since it is in image coordinates
                 gt_joints2d *= tf.constant([1.0, -1.0])
                 gt_joints2d += tf.stack([0., self.img_dim[1]])
                 # For now only estimate camera position z and rotation about y
                 out_cam_pos = self.outputs[:, 72:75]
-                pos_mask = tf.constant([0., 0., 1.])[tf.newaxis]
-                out_cam_pos = out_cam_pos * pos_mask
+                # out_cam_pos = out_cam_pos * pos_mask
+                # pos_mask = tf.constant([0., 0., 1.])[tf.newaxis]
                 out_cam_p_tile = tf.reshape(tf.tile(out_cam_pos,
                                                     [1, config.n_joints_smpl]),
                                             [-1, 3])
                 out_cam_rot = self.outputs[:, 75:78]
-                rot_mask = tf.constant([0., 1., 0.])[tf.newaxis]
-                out_cam_rot = out_cam_rot * rot_mask
+                # rot_mask = tf.constant([0., 1., 0.])[tf.newaxis]
+                # out_cam_rot = out_cam_rot * rot_mask
                 out_cam_r_tile = tf.reshape(tf.tile(out_cam_rot,
                                                     [1, config.n_joints_smpl]),
                                             [-1, 3])
@@ -208,7 +208,7 @@ class PoseModel3d:
                                             [-1])
 
                 # 2D reprojection loss - uses predicted camera parameters to
-                # project both GT and predicted 3D
+                # project both GT and predicted 3D: only active if low (< 0.01)
                 with tf.variable_scope("projection"):
                     # reshape from (batch, j, 3) to (batch * j, 3)
                     out_2d = proj.project(
@@ -225,9 +225,11 @@ class PoseModel3d:
                     labels=gt_2d_out_cam, predictions=out_2d,
                     weights=config.reproj_loss_scale)
                 tf.summary.scalar('reproj_loss', reproj_loss, family='losses')
+                reproj_loss = tf.minimum(1 / config.n_joints_smpl, reproj_loss)
+                total_loss += reproj_loss
 
                 # Camera loss - compares reprojected GT 3D using predicted 
-                # camera to GT 2D locations (currently not active, see config)
+                # camera to GT 2D locations: only active if low (< 0.01)
                 with tf.variable_scope("projection"):
                     out_2d_gt_pose = proj.project(
                         tf.reshape(gt_joints3d, [-1, 3]),
@@ -239,12 +241,30 @@ class PoseModel3d:
                     labels=tf.reshape(gt_joints2d, [-1, 2]),
                     predictions=out_2d_gt_pose, weights=config.cam_loss_scale)
                 tf.summary.scalar('cam_loss', cam_loss, family='losses')
+                cam_loss = tf.minimum(0.5, cam_loss)
+
+                # Camera angle loss - compare reprojected GT 3D using predicted 
+                # camera to GT 2D locations using a different method
+                # See https://arxiv.org/pdf/1808.04999.pdf
+                vec_to_gt_3d = gt_joints3d - out_cam_pos[:, tf.newaxis, :]
+                vec_to_gt_3d = tf.nn.l2_normalize(vec_to_gt_3d, axis=2)
+                gt_2d_in_3d = utils.get_2d_points_in_3d(
+                    gt_joints2d, out_cam_rot, out_cam_f, self.img_dim)
+                vec_to_gt_2d = tf.nn.l2_normalize(gt_2d_in_3d, axis=2)
+                dot = tf.reduce_sum(vec_to_gt_3d * vec_to_gt_2d, axis=2)
+                # Dot product can be out of [-1, 1] because of normalize eps
+                dot = tf.clip_by_value(dot, -1.0 + 1e-6, 1.0 - 1e-6)
+                angle_diff = tf.acos(dot)
+                cam_angle_loss = tf.losses.mean_squared_error(
+                    labels=tf.zeros_like(angle_diff), predictions=angle_diff,
+                    weights=config.cam_angle_loss_scale)
+                tf.summary.scalar('cam_angle', cam_angle_loss, family='losses')
 
                 # Camera regularisation
-                # camera position -5 < z < 0, camera focal length > 0
+                # camera position -5 < z < 0.3, camera focal length > 0
                 cam_limits = tf.gather(self.outputs, [74, 74, 78], axis=1)
                 cam_limits *= tf.constant([-1.0, 1.0, 1.0])[tf.newaxis]
-                cam_limits += tf.constant([0.0, 10.0, 0.0])
+                cam_limits += tf.constant([-0.3, 10.0, 0.0])
                 cam_zeros = tf.zeros_like(cam_limits)
                 cam_neg = tf.where(tf.less(cam_limits, cam_zeros),
                                    cam_limits, cam_zeros)
@@ -260,23 +280,7 @@ class PoseModel3d:
                     labels=cam_rot_zeros, predictions=cam_rot_too_large,
                     weights=10.0)
                 cam_reg_losses = cam_rot_loss + cam_neg_loss
-
-                # Camera angle loss - compare reprojected GT 3D using predicted 
-                # camera to GT 2D locations using a different method
-                # See https://arxiv.org/pdf/1808.04999.pdf
-                vec_to_gt_3d = gt_joints3d - out_cam_pos[:, tf.newaxis, :]
-                vec_to_gt_3d = tf.nn.l2_normalize(vec_to_gt_3d, axis=2)
-                gt_2d_in_3d = utils.get_2d_points_in_3d(
-                    gt_joints2d, out_cam_rot, out_cam_f, self.img_dim)
-                vec_to_gt_2d = tf.nn.l2_normalize(gt_2d_in_3d, axis=2)
-                dot = tf.reduce_sum(vec_to_gt_3d * vec_to_gt_2d, axis=2)
-                # Dot product can be out of [-1, 1] because of normalize eps
-                dot = tf.clip_by_value(dot, -0.9999, 0.9999)
-                angle_diff = tf.acos(dot)
-                cam_angle_loss = tf.losses.mean_squared_error(
-                    labels=tf.zeros_like(angle_diff), predictions=angle_diff)
-                tf.summary.scalar('cam_angle', cam_angle_loss, family='losses')
-                total_loss += cam_angle_loss + cam_reg_losses
+                total_loss += cam_loss + cam_angle_loss + cam_reg_losses
 
                 # 3D points should be in positive half-space of camera plane
                 # Currently not active (not added to total loss)
@@ -292,7 +296,7 @@ class PoseModel3d:
                     labels=plane_zeros, predictions=cam_plane_neg)
                 tf.summary.scalar('cam_aux', cam_plane_loss, family='losses')
 
-                # Summary scalars
+                # Camera position summary scalars
                 pos_diff = tf.reduce_mean(tf.norm(out_cam_pos, axis=1), axis=0)
                 pos_diff = tf.reduce_mean(out_cam_pos[2], axis=0)
                 rot_dot = tf.reduce_sum(

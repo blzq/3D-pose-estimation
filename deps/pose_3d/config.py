@@ -2,18 +2,20 @@
 
 from math import pi
 
+n_joints = 14  # COCO number of joints (not including background, eyes, ears)
+n_joints_smpl = 24  # SMPL model number of joints
+
 total_loss_scale = 1.0
 pose_loss_scale = 1.0
 pose_loss_direct_scale = 1.0
 mesh_loss_scale = 1.0
 joint_loss_scale = 2.0
-reg_loss_scale = 1.0
+reg_loss_scale = 100.0
 joint_limit = pi * 2.0
 disc_loss_scale = 2
-reproj_loss_scale = 0  # 0.000016
-cam_loss_scale = 0.000016
-n_joints = 14  # COCO number of joints (not including background, eyes, ears)
-n_joints_smpl = 24  # SMPL model number of joints
+reproj_loss_scale = 1.0
+cam_loss_scale = (1.0 / (400 * n_joints_smpl))  # 400 = sqrt(240^2 + 320^2)
+cam_angle_loss_scale = 10.0
 
 input_img_size = (240, 320)  # image (height, width)
 

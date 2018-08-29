@@ -18,7 +18,7 @@ def build_model(inputs, training: bool):
             input_heatmaps = inputs[:, :, :, :config.n_joints]
             input_heatmaps = utils.gaussian_blur(input_heatmaps)
             inputs = tf.concat([input_heatmaps, input_rgb], axis=3)
-            tf.summary.image('in_images', 
+            tf.summary.image('in_images',
                              tf.reduce_sum(input_rgb, axis=3, keepdims=True),
                              max_outputs=1)
 
@@ -62,8 +62,11 @@ def build_model(inputs, training: bool):
             bl4_cam = _bilinear_res_block(bl3_cam, cam_units, training)
 
         with tf.variable_scope('out_fc'):
-            out_pose = tf.layers.dense(bl4, 72) # 24*3 rotations
-            out_cam = tf.layers.dense(bl4_cam, 7) # f x 1, t x 3, r x 3
+            out_init = tf.truncated_normal_initializer(stddev=1e-7)
+            out_pose = tf.layers.dense(
+                bl4, 72, kernel_initializer=out_init)     # 24*3 rotations
+            out_cam = tf.layers.dense(
+                bl4_cam, 7, kernel_initializer=out_init)  # f x 1, t x 3, r x 3
             out = tf.concat([out_pose, out_cam], axis=1)
 
     return out
