@@ -84,7 +84,8 @@ def process_frames(in_path, estimator):
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
-        print("Usage: python3 predict_surreal_videos.py <path-to-SURREAL-dataset>")
+        print("Usage: python3 predict_surreal_videos.py "
+              "<path-to-SURREAL-dataset>")
         sys.exit()
     surreal_path = os.path.realpath(sys.argv[1])
     sys.exit(main(surreal_path))

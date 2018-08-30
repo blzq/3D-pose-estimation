@@ -23,14 +23,14 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
     origin_forward = tf.reshape(origin_forward, [batch_size, 3, 1])
     cam_lookat = tf.matmul(cam_rot_mat, origin_forward)
     cam_lookat = tf.squeeze(cam_lookat)
+    cam_lookat = tf.reshape(cam_lookat, cam_pos.shape)
     cam_lookat = cam_pos + cam_lookat
-    cam_lookat.set_shape(cam_pos.shape)
 
     origin_up = tf.tile(tf.constant([0.0, 1.0, 0.0]), [batch_size])
     origin_up = tf.reshape(origin_up, [batch_size, 3, 1])
     cam_up = tf.matmul(cam_rot_mat, origin_up)
     cam_up = tf.squeeze(cam_up)
-    cam_up.set_shape(cam_pos.shape)
+    cam_up = tf.reshape(cam_up, cam_pos.shape)
 
     diffuse = tf.ones_like(verts, dtype=tf.float32)
     if vert_faces is None or lights is None:
@@ -59,6 +59,7 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
 
 
 def get_camera_normal_plane(cam_pos, cam_rot):
+    # Get the camera normal plane and offset from origin (n and d in p . n = d)
     batch_size = tf.shape(cam_pos)[0]
     cam_rot_mat = project.rodrigues_batch(cam_rot)
 
@@ -74,6 +75,7 @@ def get_camera_normal_plane(cam_pos, cam_rot):
 
 
 def get_2d_points_in_3d(points_2d, cam_rot, cam_f, img_dim):
+    # Get the 2D projected points as 3D points lying on the camera image plane
     rescaled_2d = config.ss * (points_2d - img_dim / 2) / img_dim[1]
     fl_broadcast = tf.reshape(cam_f, [-1, 1, 1])
     fl_broadcast = tf.tile(fl_broadcast, [1, 24, 1])
@@ -150,7 +152,7 @@ def vertex_faces_from_face_verts(faces):
 def rotate_global_pose(thetas, zrot):
     # In SURREAL, the global rotation is such that the person's vertical
     # is aligned with the z axis. Make it so the person's vertical is aligned
-    # with the y axis.
+    # with the y axis
     batch_size = tf.shape(thetas)[0]
 
     turn_x = tf.constant([-np.pi / 2, 0.0, 0.0])
@@ -166,7 +168,7 @@ def rotate_global_pose(thetas, zrot):
 
 
 def add_axis_angle_rotations(rv1, rv2):
-    # given angle*axis rotation vectors a*l and b*m, result angle*axis: c*n
+    # Given angle*axis rotation vectors a*l and b*m, result angle*axis: c*n
     # cos(c/2) = cos(a/2)cos(b/2) - sin(a/2)sin(b/2) (l . m)
     # sin(c/2) (n) =
     #   sin(a/2)cos(b/2) (l) + cos(a/2)sin(b/2) (m) + sin(a/2)sin(b/2) (l x m)
@@ -197,8 +199,6 @@ def soft_argmax(heatmaps):
     strength = 100.0  # Tunable parameter for softmax; higher -> sharper peak
     shape = tf.shape(heatmaps)
     b, h, w, c = shape[0], shape[1], shape[2], shape[3]
-    # x_ind = tf.reshape(tf.tile(tf.range(w)[..., tf.newaxis], [h, 1]), [h, w])
-    # y_ind = tf.reshape(tf.tile(tf.range(h)[..., tf.newaxis], [1, w]), [h, w])
     x_ind, y_ind = tf.meshgrid(tf.range(w), tf.range(h))
     y_ind = tf.cast(y_ind, tf.float32)
     x_ind = tf.cast(x_ind, tf.float32)
@@ -241,7 +241,7 @@ def soft_argmax_rescaled(heatmaps):
     return tf.concat([locations, maxes[..., tf.newaxis]], axis=2)
 
 
-def gaussian_blur(img, kernel_size=11, sigma=5):
+def gaussian_blur(img, kernel_size=13, sigma=7):
     def gauss_kernel(channels, kernel_size, sigma):
         ax = tf.range(-kernel_size // 2 + 1.0, kernel_size // 2 + 1.0)
         xx, yy = tf.meshgrid(ax, ax)

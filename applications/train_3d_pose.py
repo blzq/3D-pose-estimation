@@ -63,6 +63,7 @@ if __name__ == '__main__':
                         summary_dir=SUMMARY_DIR,
                         saver_path=SAVER_PATH,
                         restore_model=True,
+                        pose_loss=True,
                         mesh_loss=True,
                         reproject_loss=True,
                         smpl_model=smpl_neutral,

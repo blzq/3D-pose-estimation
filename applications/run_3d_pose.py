@@ -6,6 +6,7 @@ import __init__
 import sys
 import os
 import glob
+import pkg_resources
 
 import tensorflow as tf
 import numpy as np
@@ -19,6 +20,7 @@ from pose_3d.pose_model_3d import PoseModel3d
 from pose_3d import data_helpers
 from pose_3d import config, utils
 
+import tf_smpl
 from tf_smpl.batch_smpl import SMPL
 
 
@@ -88,42 +90,53 @@ def main(in_filename):
                         restore_model=True)
     out_vals = pm_3d.estimate(inputs)
 
-    print(out_vals)
-    out_vals[:, :3] = 0
-
     smpl_dir = os.path.join(__init__.project_path,
                             'data', 'SMPL_model', 'models_numpy')
     smpl_model_path = os.path.join(smpl_dir, 'model_neutral_np.pkl')
+    faces_path = pkg_resources.resource_filename(tf_smpl.__name__,
+                                                 'smpl_faces.npy')
+    faces = np.load(faces_path)
 
     smpl = SMPL(smpl_model_path)
     beta = tf.zeros([1, 10])
     pose = tf.constant(out_vals[:, :72])
 
-    verts, _, _ = smpl(beta, pose, get_skin=True)
-    verts = verts[0]
+    cam_pos = tf.constant(out_vals[:, 72:75])
+    cam_rot = tf.constant(out_vals[:, 75:78])
+    cam_f = tf.tile([config.fl], [out_vals.shape[0]])
 
-    result = tf.Session().run(verts)
+    verts, _, _ = smpl(beta, pose, get_skin=True)
+
+    vert_faces = utils.vertex_faces_from_face_verts(faces)
+    mesh_img = utils.render_mesh_verts_cam(
+        verts, cam_pos, cam_rot, tf.atan2(config.ss / 2, cam_f) * 360 / np.pi,
+        tf.constant(faces, dtype=tf.int32), vert_faces,
+        cam_pos[:, tf.newaxis, :])
+
+    verts_eval, mesh_img_eval = tf.Session().run((verts[0], mesh_img[0]))
 
     dirpath = os.path.dirname(os.path.realpath(__file__))
-    faces = np.load(os.path.join(dirpath, '..', 'deps', 'tf_smpl',
-                                 'smpl_faces.npy'))
-
     outmesh_path = os.path.join(dirpath, 'smpl_tf.obj')
     with open(outmesh_path, 'w') as fp:
-        for v in result:
+        for v in verts_eval:
             fp.write('v %f %f %f\n' % (v[0], v[1], v[2]))
 
         for f in faces + 1:
             fp.write('f %d %d %d\n' % (f[0], f[1], f[2]))
 
     op_out_im = OpPoseEstimator.draw_humans(in_im, humans, imgcopy=True)
-    plt.subplot(121)
+    plt.subplot(131)
     plt.imshow(np.sum(heatmaps[0][:, :, :config.n_joints], axis=2),
                cmap='gray')
-    plt.subplot(122)
+    plt.subplot(132)
     plt.imshow(op_out_im)
+    plt.subplot(133)
+    print(mesh_img_eval.shape)
+    plt.imshow(np.squeeze(mesh_img_eval), cmap='gray')
     plt.show()
 
 
 if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Usage: python3 run_3d_pose.py <path-to-input-image>")
     sys.exit(main(sys.argv[1]))

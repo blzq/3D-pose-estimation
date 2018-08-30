@@ -14,7 +14,7 @@ reg_loss_scale = 100.0
 joint_limit = pi * 2.0
 disc_loss_scale = 2
 reproj_loss_scale = 1.0
-cam_loss_scale = (1.0 / (400 * n_joints_smpl))  # 400 = sqrt(240^2 + 320^2)
+cam_loss_scale = 0.2 * (1 / (400 * n_joints_smpl))  # 400 = sqrt(240^2 + 320^2)
 cam_angle_loss_scale = 10.0
 
 input_img_size = (240, 320)  # image (height, width)

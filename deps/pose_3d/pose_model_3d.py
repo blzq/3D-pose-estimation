@@ -25,6 +25,7 @@ class PoseModel3d:
                  summary_dir='/tmp/tf_logs/3d_pose/',
                  saver_path='/tmp/tf_ckpts/3d_pose/ckpts/3d_pose.ckpt',
                  restore_model=True,
+                 pose_loss=True,
                  reproject_loss=True,
                  mesh_loss=True,
                  smpl_model=None,
@@ -54,6 +55,8 @@ class PoseModel3d:
                 self.in_placeholder = tf.placeholder_with_default(
                     self.next_input[0], input_shape)
                 self.outputs = build_model(self.in_placeholder, training)
+
+                self.pose_loss = pose_loss
                 self.mesh_loss = mesh_loss
                 self.reproject_loss = reproject_loss
                 if self.mesh_loss or self.reproject_loss:
@@ -138,19 +141,24 @@ class PoseModel3d:
 
     def get_encoder_losses(self, out_pose, gt_pose, betas, gt_joints2d):
         with self.graph.as_default():
+            total_loss = 0
+
             with tf.variable_scope("rodrigues"):
                 out_mat = proj.rodrigues_batch(tf.reshape(out_pose, [-1, 3]))
                 gt_mat = proj.rodrigues_batch(tf.reshape(gt_pose, [-1, 3]))
 
-            pose_loss_direct = tf.losses.mean_squared_error(
-                labels=gt_pose, predictions=out_pose,
-                weights=config.pose_loss_direct_scale)
-            tf.summary.scalar('pose_loss_direct', pose_loss_direct,
-                              family='losses')
-            pose_loss = tf.losses.mean_squared_error(
-                labels=gt_mat, predictions=out_mat,
-                weights=config.pose_loss_scale)
-            tf.summary.scalar('pose_loss', pose_loss, family='losses')
+            if self.pose_loss:
+                # Switch to L1 loss?
+                pose_loss_direct = tf.losses.mean_squared_error(
+                    labels=gt_pose, predictions=out_pose,
+                    weights=config.pose_loss_direct_scale)
+                tf.summary.scalar('pose_loss_direct', pose_loss_direct,
+                                family='losses')
+                pose_loss = tf.losses.mean_squared_error(
+                    labels=gt_mat, predictions=out_mat,
+                    weights=config.pose_loss_scale)
+                tf.summary.scalar('pose_loss', pose_loss, family='losses')
+                total_loss += pose_loss
 
             out_pose_norm = tf.norm(tf.reshape(out_pose, [-1, 3]), axis=1)
             out_pose_zeros = tf.zeros_like(out_pose_norm, tf.float32)
@@ -160,8 +168,7 @@ class PoseModel3d:
                 labels=out_pose_zeros, predictions=out_pose_too_large,
                 weights=config.reg_loss_scale)
             tf.summary.scalar('reg_loss', reg_loss, family='losses')
-
-            total_loss = pose_loss + reg_loss
+            total_loss += reg_loss
 
             if self.mesh_loss or self.reproject_loss:
                 # 3D mesh loss uses ground truth global rotation
@@ -206,7 +213,7 @@ class PoseModel3d:
                     [-1])
 
                 # 2D reprojection loss - uses predicted camera parameters to
-                # project both GT and predicted 3D: only active if low (< 0.01)
+                # project both GT and predicted 3D: capped unless low
                 # Stop gradients since this loss should only affect pose preds
                 cam_params_tile_sg = (
                     tf.stop_gradient(out_cam_p_tile),
@@ -230,7 +237,7 @@ class PoseModel3d:
                 total_loss += reproj_loss
 
                 # Camera loss - compares reprojected GT 3D using predicted
-                # camera to GT 2D locations: only active if low (< 0.01)
+                # camera to GT 2D locations: capped unless low (< 0.5 of img)
                 with tf.variable_scope("projection"):
                     out_2d_gt_pose = proj.project(
                         tf.reshape(gt_joints3d, [-1, 3]),
@@ -245,8 +252,9 @@ class PoseModel3d:
                 cam_loss = tf.minimum(0.5, cam_loss)
 
                 # Camera angle loss - compare reprojected GT 3D using predicted
-                # camera to GT 2D locations using a different method
+                # camera to GT 2D locations using a ray method
                 # See https://arxiv.org/pdf/1808.04999.pdf
+                # Switch to L1 loss?
                 vec_to_gt_3d = gt_joints3d - out_cam_pos[:, tf.newaxis, :]
                 vec_to_gt_3d = tf.nn.l2_normalize(vec_to_gt_3d, axis=2)
                 gt_2d_in_3d = utils.get_2d_points_in_3d(
