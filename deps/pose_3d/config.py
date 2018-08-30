@@ -5,6 +5,11 @@ from math import pi
 n_joints = 14  # COCO number of joints (not including background, eyes, ears)
 n_joints_smpl = 24  # SMPL model number of joints
 
+input_img_size = (240, 320)  # image (height, width)
+
+fl = 0.05  # focal length in metres
+ss = 0.024 # camera sensor size in metres
+
 total_loss_scale = 1.0
 pose_loss_scale = 1.0
 pose_loss_direct_scale = 1.0
@@ -13,14 +18,10 @@ joint_loss_scale = 2.0
 reg_loss_scale = 100.0
 joint_limit = pi * 2.0
 disc_loss_scale = 2
-reproj_loss_scale = 1.0
-cam_loss_scale = 0.2 * (1 / (400 * n_joints_smpl))  # 400 = sqrt(240^2 + 320^2)
+reproj_loss_scale = 1.0 * ss
+cam_loss_scale = (1 / (400 * n_joints_smpl))  # 400 = sqrt(240^2 + 320^2)
 cam_angle_loss_scale = 10.0
 
-input_img_size = (240, 320)  # image (height, width)
-
-fl = 0.05  # focal length in metres
-ss = 0.024 # camera sensor size in metres
 
 # 2D joint order and locations for various datasets
 # SMPL model joints order:

@@ -226,8 +226,9 @@ class PoseModel3d:
                     gt_2d_out_cam = proj.project(
                         tf.reshape(gt_joints3d, [-1, 3]), *cam_params_tile_sg)
                 # Rescale to image size
-                out_2d = out_2d * self.img_dim[1] + self.img_dim / 2
-                gt_2d_out_cam = gt_2d_out_cam*self.img_dim[1] + self.img_dim/2
+                out_2d = out_2d / config.ss * self.img_dim[1] + self.img_dim/2
+                gt_2d_out_cam = (gt_2d_out_cam / config.ss * self.img_dim[1]
+                                 + self.img_dim/2)
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 reproj_loss = tf.losses.mean_squared_error(
                     labels=gt_2d_out_cam, predictions=out_2d,
@@ -243,7 +244,8 @@ class PoseModel3d:
                         tf.reshape(gt_joints3d, [-1, 3]),
                         out_cam_p_tile, out_cam_r_tile, out_cam_f_tile)
                 # Rescale to image size
-                out_2d_gt_pose = out_2d_gt_pose*self.img_dim[1]+self.img_dim/2
+                out_2d_gt_pose = (out_2d_gt_pose / config.ss * self.img_dim[1]
+                                  + self.img_dim/2)
                 # joints2d reshape from (batch, j, 2) to (batch * j, 2)
                 cam_loss = tf.losses.mean_squared_error(
                     labels=tf.reshape(gt_joints2d, [-1, 2]),
@@ -303,11 +305,10 @@ class PoseModel3d:
                     p_dot_n, plane_zeros)
                 cam_plane_loss = tf.losses.mean_squared_error(
                     labels=plane_zeros, predictions=cam_plane_neg)
-                tf.summary.scalar('cam_aux', cam_plane_loss, family='losses')
+                # tf.summary.scalar('cam_aux', cam_plane_loss, family='losses')
 
                 # Camera position summary scalars
                 pos_diff = tf.reduce_mean(tf.norm(out_cam_pos, axis=1), axis=0)
-                pos_diff = tf.reduce_mean(out_cam_pos[2], axis=0)
                 rot_dot = tf.reduce_sum(
                     cam_plane_n * tf.nn.l2_normalize(-out_cam_pos, axis=1),
                     axis=1)

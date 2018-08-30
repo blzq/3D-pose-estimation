@@ -9,7 +9,7 @@ from tf_perspective_projection import project
 import tf_pose.common
 
 
-def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
+def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_fov, faces,
                           vert_faces=None, lights=None):
     batch_size = tf.shape(verts)[0]
 
@@ -23,14 +23,14 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
     origin_forward = tf.reshape(origin_forward, [batch_size, 3, 1])
     cam_lookat = tf.matmul(cam_rot_mat, origin_forward)
     cam_lookat = tf.squeeze(cam_lookat)
-    cam_lookat = tf.reshape(cam_lookat, cam_pos.shape)
+    cam_lookat = tf.reshape(cam_lookat, [batch_size, 3])
     cam_lookat = cam_pos + cam_lookat
 
     origin_up = tf.tile(tf.constant([0.0, 1.0, 0.0]), [batch_size])
     origin_up = tf.reshape(origin_up, [batch_size, 3, 1])
     cam_up = tf.matmul(cam_rot_mat, origin_up)
     cam_up = tf.squeeze(cam_up)
-    cam_up = tf.reshape(cam_up, cam_pos.shape)
+    cam_up = tf.reshape(cam_up, [batch_size, 3])
 
     diffuse = tf.ones_like(verts, dtype=tf.float32)
     if vert_faces is None or lights is None:
@@ -48,7 +48,7 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_f, faces,
         verts, faces, normals, diffuse, cam_pos, cam_lookat, cam_up,
         lights, light_intensities, img_width, img_height,
         specular_colors=None, shininess_coefficients=None, ambient_color=None,
-        fov_y=cam_f, near_clip=0.01, far_clip=100.0)
+        fov_y=cam_fov, near_clip=config.fl, far_clip=100.0)
 
     if lights is None or vert_faces is None:
         rendered = rendered[:, :, :, 3, tf.newaxis]  # alpha ch: silhouette
