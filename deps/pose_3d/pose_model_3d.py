@@ -201,8 +201,9 @@ class PoseModel3d:
                     tf.tile(out_cam_rot, [1, config.n_joints_smpl]), [-1, 3])
                 out_cam_f = self.outputs[:, 78]
                 out_cam_f = tf.tile([config.fl], [tf.shape(self.outputs)[0]])
-                out_cam_f_tile = tf.squeeze(tf.tile(out_cam_f[:, tf.newaxis], 
-                                            [1, config.n_joints_smpl]))
+                out_cam_f_tile = tf.reshape(
+                    tf.tile(out_cam_f[:, None], [1, config.n_joints_smpl]),
+                    [-1])
 
                 # 2D reprojection loss - uses predicted camera parameters to
                 # project both GT and predicted 3D: only active if low (< 0.01)
