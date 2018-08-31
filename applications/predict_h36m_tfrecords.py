@@ -66,11 +66,16 @@ if __name__ == '__main__':
             img, joints2d = tf.Session().run((img, joints2d))
             if img.shape[0] > 290:
                 img = img[:290, :, :]
-            if img.shape[0] < 290 or img.shape[1] < 300 :
+            if img.shape[1] > 300:
+                img = img[:, :300, :]
+            if img.shape[0] < 290:
                 pad_0 = 290 - img.shape[0]
+                img = np.pad(img, [(0, pad_0), (0, 0), (0, 0)],
+                             'constant', constant_values=0)
+            if img.shape[1] < 300:
                 pad_1 = 300 - img.shape[1]
-                img = np.pad(img, [(0, pad_0), (0, pad_1), (0, 0)], 'constant',
-                             constant_values=0)
+                img = np.pad(img, [(0, 0), (0, pad_1), (0, 0)],
+                             'constant', constant_values=0)
 
             h = estimator.inference(img, resize_to_default=True,
                                     upsample_size=4.0)

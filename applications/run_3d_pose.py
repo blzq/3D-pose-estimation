@@ -131,7 +131,6 @@ def main(in_filename):
     plt.subplot(132)
     plt.imshow(op_out_im)
     plt.subplot(133)
-    print(mesh_img_eval.shape)
     plt.imshow(np.squeeze(mesh_img_eval), cmap='gray')
     plt.show()
 
