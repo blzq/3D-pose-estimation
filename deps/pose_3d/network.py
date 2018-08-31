@@ -164,6 +164,8 @@ def _make_divisible(v, divisor: int):
 
 
 def build_discriminator(inputs):
+    # Change discriminator to discriminate on 3D joint locations instead of
+    # joint rotations?
     with tf.variable_scope('discriminator'):
         batch_size = tf.shape(inputs)[0]
         # Reshape from (batch, 24, 3) to (batch * 24, 3)

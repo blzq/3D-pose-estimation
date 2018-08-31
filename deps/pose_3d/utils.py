@@ -23,14 +23,14 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_fov, faces,
     origin_forward = tf.reshape(origin_forward, [batch_size, 3, 1])
     cam_lookat = tf.matmul(cam_rot_mat, origin_forward)
     cam_lookat = tf.squeeze(cam_lookat)
-    cam_lookat = tf.reshape(cam_lookat, [batch_size, 3])
-    cam_lookat = cam_pos + cam_lookat
+    cam_lookat = tf.reshape(cam_lookat, cam_pos.shape)
+    cam_lookat = cam_lookat + cam_pos
 
     origin_up = tf.tile(tf.constant([0.0, 1.0, 0.0]), [batch_size])
     origin_up = tf.reshape(origin_up, [batch_size, 3, 1])
     cam_up = tf.matmul(cam_rot_mat, origin_up)
     cam_up = tf.squeeze(cam_up)
-    cam_up = tf.reshape(cam_up, [batch_size, 3])
+    cam_up = tf.reshape(cam_up, cam_pos.shape)
 
     diffuse = tf.ones_like(verts, dtype=tf.float32)
     if vert_faces is None or lights is None:
@@ -59,7 +59,7 @@ def render_mesh_verts_cam(verts, cam_pos, cam_rot, cam_fov, faces,
 
 
 def get_camera_normal_plane(cam_pos, cam_rot):
-    # Get the camera normal plane and offset from origin (n and d in p . n = d)
+    # Get the camera plane normal and offset from origin (n and d in p . n = d)
     batch_size = tf.shape(cam_pos)[0]
     cam_rot_mat = project.rodrigues_batch(cam_rot)
 
@@ -168,10 +168,16 @@ def rotate_global_pose(thetas, zrot):
 
 
 def add_axis_angle_rotations(rv1, rv2):
-    # Given angle*axis rotation vectors a*l and b*m, result angle*axis: c*n
-    # cos(c/2) = cos(a/2)cos(b/2) - sin(a/2)sin(b/2) (l . m)
-    # sin(c/2) (n) =
-    #   sin(a/2)cos(b/2) (l) + cos(a/2)sin(b/2) (m) + sin(a/2)sin(b/2) (l x m)
+    """ Given angle*axis rotation vectors a*l and b*m, result angle*axis: c*n
+    cos(c/2) = cos(a/2)cos(b/2) - sin(a/2)sin(b/2) (l . m)
+    sin(c/2) (n) =
+      sin(a/2)cos(b/2) (l) + cos(a/2)sin(b/2) (m) + sin(a/2)sin(b/2) (l x m)
+    Args:
+        rv1, rv2: Axis-angle rotation Tensors with shape [batch_size, 3]
+    Returns:
+        Axis-angle rotation in [batch_size, 3] Tensor which when applied is
+        equivalent to application of rv2 then rv1
+    """
     a = tf.norm(rv1, axis=1, keepdims=True)
     b = tf.norm(rv2, axis=1, keepdims=True)
 
@@ -242,7 +248,7 @@ def soft_argmax_rescaled(heatmaps):
 
 
 def gaussian_blur(img, kernel_size=13, sigma=7):
-    def gauss_kernel(channels, kernel_size, sigma):
+    def gauss_kernel(channels, kernel_size: int, sigma):
         ax = tf.range(-kernel_size // 2 + 1.0, kernel_size // 2 + 1.0)
         xx, yy = tf.meshgrid(ax, ax)
         kernel = tf.exp(-(xx ** 2 + yy ** 2) / (2.0 * sigma ** 2))

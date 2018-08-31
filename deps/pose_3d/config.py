@@ -2,13 +2,14 @@
 
 from math import pi
 
-n_joints = 14  # COCO number of joints (not including background, eyes, ears)
+
+n_joints = 14       # COCO number of joints (excluding background, eyes, ears)
 n_joints_smpl = 24  # SMPL model number of joints
 
 input_img_size = (240, 320)  # image (height, width)
 
-fl = 0.05  # focal length in metres
-ss = 0.024 # camera sensor size in metres
+fl = 0.05   # focal length in metres
+ss = 0.024  # camera (vertical) sensor size in metres
 
 total_loss_scale = 1.0
 pose_loss_scale = 1.0
